@@ -1,0 +1,40 @@
+cff-version: 1.2.0
+message: "If you use this plugin, please cite the upstream HarnessMM paper below."
+title: HarnessMM DSH Plugin
+type: software
+version: 1.0.0
+license: Apache-2.0
+repository-code: https://github.com/Xiuxiu-6/harnessmm-dsh
+abstract: >-
+  A DeepSeek Harness Host plugin implementing guarded decision reuse. The model
+  authors already-decided tool actions once; actions whose receipt guard holds
+  execute through the native tools without another reasoning request, and each
+  substitution is certified after the real tool result returns. Derived from the
+  HarnessMM research codebase.
+keywords:
+  - deepseek-harness
+  - dsh
+  - dsh-plugin
+  - harnessmm
+  - decision-reuse
+  - token-efficiency
+references:
+  - type: software
+    title: "HarnessMM: Recursive Self-Improvement for Harness Token Efficiency"
+    authors:
+      - family-names: Jiang
+        given-names: Yuhua
+      - family-names: Xu
+        given-names: Chang
+      - family-names: Gao
+        given-names: Feifei
+      - family-names: Zhao
+        given-names: Li
+    year: 2026
+    repository-code: https://github.com/YuhuaJiang2002/HarnessMM
+    url: https://arxiv.org/abs/2610.32813
+    license: Apache-2.0
+    notes: >-
+      Upstream work that this plugin is derived from. The plugin ports the GDR
+      and CCS contracts from integrations/deepseek_harness/sar_v2.mjs and
+      cot_jev.mjs; see NOTICE for the changes made.

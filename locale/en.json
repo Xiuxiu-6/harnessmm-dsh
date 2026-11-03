@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "title": "HarnessMM Guarded Reuse",
+    "description": "Reuses tool actions the model has already decided, executing them through the native tools so fewer reasoning requests are paid."
+  },
+  "status": {
+    "off": "Off",
+    "on": "Guarded reuse active"
+  },
+  "tool": {
+    "statusName": "harnessmm_status",
+    "statusTitle": "HarnessMM decision-reuse status",
+    "recentName": "harnessmm_receipts",
+    "recentTitle": "HarnessMM substitution certificates"
+  }
+}

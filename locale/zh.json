@@ -1,0 +1,16 @@
+{
+  "meta": {
+    "title": "HarnessMM 决策复用",
+    "description": "复用模型已经决定好的工具动作，直接通过原生工具执行，从而减少需要付费的推理请求。"
+  },
+  "status": {
+    "off": "已关闭",
+    "on": "守卫式复用已启用"
+  },
+  "tool": {
+    "statusName": "harnessmm_status",
+    "statusTitle": "HarnessMM 决策复用状态",
+    "recentName": "harnessmm_receipts",
+    "recentTitle": "HarnessMM 替换证书"
+  }
+}

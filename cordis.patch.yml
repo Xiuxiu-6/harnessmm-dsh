@@ -1,0 +1,10 @@
+- insert:
+    - id: harnessmm-guarded-reuse
+      name: 'dsh-plugin-harnessmm'
+      config:
+        enabled: true
+        minimumChain: 2
+        maximumCandidates: 16
+        maximumFastSteps: 8
+        injectPlanInstruction: true
+        auditLog: true

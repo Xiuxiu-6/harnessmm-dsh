@@ -1,0 +1,65 @@
+{
+  "name": "dsh-plugin-harnessmm",
+  "version": "1.0.0",
+  "description": "Guarded decision reuse for the DeepSeek Harness: the model authors already-decided tool actions once, and receipt-supported ones execute through the native tools without another reasoning request.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./engine": "./engine.js",
+    "./package.json": "./package.json",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "engine.js",
+    "cordis.patch.yml",
+    "locale/*.json",
+    "icon.svg",
+    "README.md",
+    "README.zh.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "check": "node --check index.js && node --check engine.js",
+    "test": "node --import ./tests/register-vendor.mjs --test tests/*.test.mjs"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/schemastery": "^3.18.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/schemastery": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.1-rc.1"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "agent",
+    "token-efficiency",
+    "decision-reuse",
+    "harnessmm"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Xiuxiu-6/harnessmm-dsh.git"
+  },
+  "homepage": "https://github.com/Xiuxiu-6/harnessmm-dsh#readme",
+  "bugs": {
+    "url": "https://github.com/Xiuxiu-6/harnessmm-dsh/issues"
+  },
+  "license": "Apache-2.0"
+}

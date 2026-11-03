@@ -1,0 +1,53 @@
+HarnessMM DSH Plugin
+Copyright 2026 Xiuxiu-6 contributors
+
+This product is a derivative work of HarnessMM
+(https://github.com/YuhuaJiang2002/HarnessMM), which is licensed under the
+Apache License, Version 2.0. The upstream HarnessMM NOTICE reads:
+
+    HarnessMM
+    Copyright 2026 PhiAgent-0 contributors
+
+    This repository extracts the HarnessMM implementation from the PhiAgent
+    research workspace maintained by Yuhua Jiang. The Python package is named
+    harnessmm; legacy phiagent imports and original protocol identifiers remain
+    supported. Deployment paths and hostnames were replaced with placeholders
+    for this public release.
+
+    The project source retains its Apache License, Version 2.0 terms. Upstream
+    agent runtimes, benchmarks, datasets, model weights and separately installed
+    dependencies are governed by their respective licenses and access terms.
+    No upstream model weights, benchmark datasets or native runtime checkouts
+    are redistributed in this repository.
+
+Changes from the upstream work
+------------------------------
+
+This plugin is not the HarnessMM research codebase. It is a DeepSeek Harness
+Host plugin that re-implements the Guarded Decision Reuse (GDR) and Certified
+Callback Substitution (CCS) contracts for a general-purpose harness. Relative
+to upstream:
+
+  * It is derived from the upstream modules
+    `integrations/deepseek_harness/sar_v2.mjs` and
+    `integrations/deepseek_harness/cot_jev.mjs` (the `ExecutableSubdag`
+    controller and the v6 authored-bank contract), not the full repository.
+  * The upstream token-based admission rules (slow-token priors, the
+    `net > 1024` threshold, TRAIN-partition medians) are omitted. Admission
+    is structural instead: a minimum literal chain length plus a public-byte
+    cap plus deterministic receipt-guard satisfaction.
+  * The upstream fast-selector path, which posts a one-token classification
+    request to a loopback-only provider endpoint and accounts response
+    logprobs, is omitted. This plugin never makes an extra model call: a
+    request is either answered from an already-decided action or it is not.
+  * Provider and model pinning (`options.model !== this.model`) is removed,
+    because the harness can change models mid-session.
+  * The Python research runners, benchmark controllers, recursive
+    self-improvement (RSI) loops, configurations and datasets are not
+    included and are not required by this plugin.
+  * Persistence, session projection and the compaction-time controller message
+    rewrite are not implemented; the authored plan stays in the conversation
+    as ordinary assistant text.
+
+No HarnessMM benchmark results, measured token savings, or published numbers
+are reproduced here or claimed by this plugin.
