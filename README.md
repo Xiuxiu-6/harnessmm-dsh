@@ -132,11 +132,25 @@ not convert that into a claimed saving.
 
 ## Install
 
+Published on npm as `harnessmm-dsh`. In the DSH **Plugins → Add plugin** dialog, type the package name:
+
+```
+harnessmm-dsh
+```
+
+Or from a terminal:
+
+```sh
+npm i harnessmm-dsh
+```
+
+Installing from the repository (tracks `main`) also works:
+
 ```sh
 dsh plugin --profile <your-profile> add github:Xiuxiu-6/harnessmm-dsh
 ```
 
-Or install the local directory:
+Or install a local directory:
 
 ```sh
 dsh plugin --profile <your-profile> add /path/to/harnessmm-dsh

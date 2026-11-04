@@ -88,7 +88,25 @@ banksAuthored > 0  → B 已授权·等待命中
 
 ## 4. 安装
 
-### 4.1 复制文件到插件目录
+### 4.1 一行安装（推荐）
+
+在 DSH 的 **插件页 → 添加插件** 里填包名：
+
+```
+harnessmm-dsh
+```
+
+或者在终端里：
+
+```
+npm i harnessmm-dsh
+```
+
+装完重启 DSH，对话页签条会多出「决策复用」页签。
+
+> 也可以填 GitHub 地址 `https://github.com/Xiuxiu-6/harnessmm-dsh`，装的是 main 最新代码；npm 版是稳定版。
+
+### 4.2 手动复制（仅开发用）
 
 把本目录下这些文件复制到
 `~/.dsh/profiles/<你的 profile>/node_modules/harnessmm-dsh/`：
@@ -98,22 +116,22 @@ panel.js          新增
 snapshot.js       新增
 web-routes.js     新增
 panel.html        新增
-client.js         新增（已构建好，41 KB）
+client.js         新增（已构建好，由 build-client.mjs 生成）
 index.js          替换（按 INDEX-PATCH.md 改 2 行）
 package.json      替换（加了 dsh.client 与 exports）
 ```
 
 > `engine.js`、`cordis.patch.yml`、`locale/`、`icon.svg` **保持原样不动**。
 
-### 4.2 改 index.js
+### 4.3 改 index.js
 
 见 [INDEX-PATCH.md](./INDEX-PATCH.md)，只需加 2 行。
 
-### 4.3 重启
+### 4.4 重启
 
 桌面端重启应用；CLI 端重启对应 profile 进程。
 
-### 4.4 打开面板
+### 4.5 打开面板
 
 两种方式：
 

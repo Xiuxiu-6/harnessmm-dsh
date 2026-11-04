@@ -84,11 +84,9 @@
       "versions": [
         {
           "version": "1.1.0",
-          "publishTimestamp": 1793773517,
+          "publishTimestamp": 1793775813,
           "source": {
-            "type": "git",
-            "url": "https://github.com/Xiuxiu-6/harnessmm-dsh",
-            "commit": "659bd9ce3d3be22ba5cf45964e18025afd77459a"
+            "type": "npm"
           },
           "engines": {
             "dsh": ">=0.2.1-rc.1"
