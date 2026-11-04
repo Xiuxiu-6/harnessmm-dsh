@@ -1,4 +1,4 @@
-﻿// Host contract tests for the productized GDR/CCS port. No model calls:
+// Host contract tests for the productized GDR/CCS port. No model calls:
 // the "slow actor" and the "native dispatcher" are scripted by the test.
 // The module under test is the one the installed bundle ships.
 import assert from 'node:assert/strict';
@@ -83,7 +83,26 @@ test('guards are evaluated deterministically against the native receipt', () => 
   assert.equal(localGuard(n, { value: { return_code: 0, stdout: 'NO', stderr: null } }).reason, 'guard_false');
   assert.equal(localGuard(n, { is_error: true, value: { return_code: 0, stdout: 'OK' } }).reason, 'native_error');
   assert.equal(localGuard(n, { value: { stdout: 'OK' } }).reason, 'required_field_missing');
-  assert.equal(localGuard(n, { value: 'not json' }).known, false);
+  assert.equal(localGuard(n, { value: 'not json' }).reason, 'guard_false');
+});
+
+test('plain-text native receipts are judged as command output', () => {
+  // DSH ships tool results as content[0].text, not a JSON envelope: a shell
+  // command's receipt is literally "CLEAN src/a.js\n". The guard must still be
+  // decidable, with stdout = the text and return_code derived from is_error.
+  const n = node('A', 'root', 'read', { file_path: 'a.ts' },
+    { return_code: 0, stdout_contains: 'CLEAN' });
+  const text = (body, isError = false) => ({
+    call_id: 'call_1', is_error: isError, value: { native_text: body },
+  });
+  assert.equal(localGuard(n, text('CLEAN src/a.js\n')).eligible, true);
+  assert.equal(localGuard(n, text('DIRTY src/a.js 3\n')).reason, 'guard_false');
+  assert.equal(localGuard(n, text('CLEAN src/a.js\n', true)).reason, 'native_error');
+  // A declared-but-unused field (stderr) must not invalidate a decidable guard.
+  assert.equal(localGuard(n, text('CLEAN src/a.js\n')).eligible, true);
+  // stderr_empty cannot be judged from a text receipt, so it stays ineligible.
+  const se = node('A', 'root', 'read', { file_path: 'a.ts' }, { stderr_empty: true });
+  assert.equal(localGuard(se, text('CLEAN src/a.js\n')).known, false);
 });
 
 test('json_equals reads a nested path and refuses prototype keys', () => {

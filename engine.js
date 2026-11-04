@@ -75,7 +75,10 @@ export function planInstruction(policy, tools) {
     : '{"EXACT_PARAMETER_NAME":"already known literal value"}';
   return (
     'Guarded decision reuse (HarnessMM) is active for this session. Before a tool call, '
-    + 'you may author a bank of already-decided future actions. '
+    + 'author a bank whenever two or more of the next tool calls already have fully fixed arguments '
+    + '(the same command repeated, a fixed list of files each needing the same steps, or the same '
+    + 'verification after every step). Do not wait to be asked; if you can write the next steps down '
+    + 'now, write the bank. '
     + `Write exactly one <CHISEL_PLAN>{"candidates":[...]}</CHISEL_PLAN> in your visible text before exactly one native tool call. `
     + 'Node format: {"candidate_id":"A","predecessor_id":"root",'
     + `"tool":"${example}","arguments":${args},`
@@ -84,12 +87,15 @@ export function planInstruction(policy, tools) {
     + 'Use only these fields. candidate_id is a unique letter A-P; predecessor_id and '
     + 'dependency_ids are "root" or an earlier candidate_id. Author 2-8 useful future '
     + `native calls whose every argument is already fully determined (at most ${policy.maximum_candidates}). `
-    + `Each tool must be one of: ${names.join(', ') || '(none)'}. `
+    + `Each tool must be one of: ${names.length ? names.join(', ') : 'the native tools available in this session'}. `
     + 'Never leave placeholders: if a parameter depends on an unseen result, omit that candidate. '
     + 'A guard is a conjunction of return_code (integer), stdout_contains (literal string), '
     + 'stdout_equals (literal string), stderr_empty (boolean), or json_equals '
     + '({"path":["field"],"value":literal}) over JSON stdout; list every field it uses in '
     + 'required_receipt_fields. A guard is checked deterministically against the immediate predecessor receipt. '
+    + 'A guard describes the PREVIOUS step\'s outcome, not the candidate\'s own expected output: return_code, '
+    + 'stdout and stderr only exist on command executions, so chain command calls — never guard a step whose '
+    + 'predecessor was a file read or an edit, its receipt carries no such fields. '
     + 'Semantic guards (task solved, code correct, looks reasonable) are invalid. '
     + 'When a guard holds, the controller dispatches that exact action through the same native tool '
     + `without another reasoning request, up to ${policy.maximum_fast_steps} consecutive actions. `
@@ -125,7 +131,13 @@ export function parseBank(message, policy, tools = []) {
   }
   if (!object(bank) || Object.keys(bank).join() !== 'candidates'
     || !Array.isArray(bank.candidates) || bank.candidates.length > policy.maximum_candidates) {
-    throw new BankContractError('Slow-authored action bank exceeds its closed candidate contract');
+    // 报错要能直接改：告诉模型多写了哪个键、候选数是不是超了。
+    const keys = object(bank) ? Object.keys(bank) : [];
+    const extra = keys.filter(key => key !== 'candidates');
+    const detail = extra.length
+      ? `top-level keys must be exactly ["candidates"], got ${JSON.stringify(keys)}`
+      : `candidates must be an array of at most ${policy.maximum_candidates} nodes`;
+    throw new BankContractError(`Slow-authored action bank exceeds its closed candidate contract: ${detail}`);
   }
   let rootArguments;
   try {
@@ -149,6 +161,20 @@ export function parseBank(message, policy, tools = []) {
       || (candidate.dependency_ids && (!Array.isArray(candidate.dependency_ids)
         || candidate.dependency_ids.some(id => !declared.has(id))))) {
       throw new BankContractError('Nonlocal or incomplete executable sub-DAG node');
+    }
+    // 守卫用到的字段必须写进 required_receipt_fields，否则运行时会被判
+    // required_field_missing，守卫永远不成立——在这里提前报出来。
+    const GUARD_TO_RECEIPT = {
+      return_code: 'return_code', stdout_contains: 'stdout', stdout_equals: 'stdout',
+      stderr_empty: 'stderr', json_equals: 'stdout',
+    };
+    const uncovered = Object.keys(candidate.guard)
+      .filter(key => !candidate.required_receipt_fields.includes(GUARD_TO_RECEIPT[key]));
+    if (uncovered.length) {
+      throw new BankContractError(
+        `Guard fields missing from required_receipt_fields: ${uncovered.join(', ')} `
+        + `(required_receipt_fields=${JSON.stringify(candidate.required_receipt_fields)})`,
+      );
     }
     if (typeof candidate.candidate_id !== 'string' || candidate.candidate_id.length !== 1
       || !LABELS.slice(0, policy.maximum_candidates).includes(candidate.candidate_id)
@@ -183,18 +209,30 @@ export function localGuard(node, receipt) {
     return { known: false, eligible: false, reason: 'invalid_guard' };
   }
   let value = receipt?.value?.native_text ?? receipt?.value;
-  for (let depth = 0; depth < 3 && typeof value === 'string'; depth++) {
+  if (typeof value === 'string') {
+    // DSH 的原生工具回执是纯文本（content[0].text），不是 JSON 包装：
+    // 命令输出形如 "CLEAN src/alpha.js\n"，没有 return_code/stdout/stderr 字段。
+    // 只有当回执本身就是 JSON 对象时才按结构化回执判定，否则用原文合成最小可判定
+    // 字段（stdout=原文，return_code 由 is_error 推出）。stderr 故意不合成：
+    // 用了 stderr_empty 的守卫会落到 required_field_missing，而不是假装成立。
+    let parsed;
     try {
-      value = JSON.parse(value);
+      parsed = JSON.parse(value);
     } catch {
-      return { known: false, eligible: false, reason: 'non_json_receipt' };
+      parsed = undefined;
     }
+    value = object(parsed)
+      ? parsed
+      : { stdout: value, return_code: receipt?.is_error ? 1 : 0, __text_receipt: true };
   }
   if (!object(value)) return { known: false, eligible: false, reason: 'missing_receipt' };
   if (receipt?.is_error) return { known: true, eligible: false, reason: 'native_error' };
   const fields = { return_code: 'return_code', stdout_contains: 'stdout', stdout_equals: 'stdout', stderr_empty: 'stderr', json_equals: 'stdout' };
   const required = node.required_receipt_fields;
-  if (!Array.isArray(required) || required.some(key => !Object.hasOwn(value, key))
+  // 只有守卫真正用到的字段必须出现在回执里：声明得多一点不该让守卫失效，
+  // 例如文本回执没有 stderr，守卫若没用 stderr_empty 就不该被拦。
+  const needed = new Set(Object.keys(guard).map(key => fields[key]));
+  if (!Array.isArray(required) || [...needed].some(key => !Object.hasOwn(value, key))
     || Object.keys(guard).some(key => !fields[key] || !required.includes(fields[key]))) {
     return { known: false, eligible: false, reason: 'required_field_missing' };
   }
