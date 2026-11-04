@@ -32,7 +32,8 @@
   ],
   "scripts": {
     "check": "node --check index.js && node --check engine.js && node --check panel.js && node --check snapshot.js && node --check web-routes.js && node --check client.js",
-    "test": "node --import ./tests/register-vendor.mjs --test tests/*.test.mjs"
+    "test": "node --import ./tests/register-vendor.mjs --test tests/*.test.mjs",
+    "release": "node release.mjs"
   },
   "dsh": {
     "bundle": {
