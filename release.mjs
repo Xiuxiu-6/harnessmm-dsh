@@ -31,6 +31,11 @@ const PATCH_PATH = path.join(ROOT, 'cordis.patch.yml');
 const NPM = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const GIT = process.platform === 'win32' ? 'git.exe' : 'git';
 
+// Windows 上直接 spawn npm.cmd 会被 Node 拒绝（EINVAL），改用 npm-cli.js 跑，
+// 拿不到就退回 cmd /c，两条路都试过才报错。
+const NPM_CLI = path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+const hasNpmCli = fs.existsSync(NPM_CLI);
+
 const argv = process.argv.slice(2);
 const dryRun = argv.includes('--dry-run');
 const otpIndex = argv.indexOf('--otp');
@@ -49,20 +54,28 @@ const fail = (msg, hint) => {
 
 /** 子进程：capture 时把输出写进临时文件（避免管道在受限环境下不可用）。 */
 function run(cmd, args, { capture = false, allowFail = false } = {}) {
-  if (!capture) {
-    const res = spawnSync(cmd, args, { cwd: ROOT, stdio: 'inherit' });
-    if (res.status !== 0 && !allowFail) fail(`${cmd} ${args.join(' ')} 失败（exit ${res.status}）`);
-    return { status: res.status ?? 1, output: '' };
+  const spawnOpts = { cwd: ROOT, ...(capture ? {} : { stdio: 'inherit' }) };
+  let fd = null;
+  if (capture) {
+    const tmp = path.join(os.tmpdir(), `hmm-release-${process.pid}-${Math.random().toString(16).slice(2)}.log`);
+    fd = fs.openSync(tmp, 'w');
+    spawnOpts.stdio = ['ignore', fd, fd];
+    spawnOpts.__tmp = tmp;
   }
-  const tmp = path.join(os.tmpdir(), `hmm-release-${process.pid}-${Math.random().toString(16).slice(2)}.log`);
-  const fd = fs.openSync(tmp, 'w');
-  const res = spawnSync(cmd, args, { cwd: ROOT, stdio: ['ignore', fd, fd] });
-  fs.closeSync(fd);
-  const output = fs.readFileSync(tmp, 'utf8');
-  fs.rmSync(tmp, { force: true });
-  if (res.status !== 0 && !allowFail) fail(`${cmd} ${args.join(' ')} 失败（exit ${res.status}）\n${output.trim()}`);
-  return { status: res.status ?? 1, output };
+  const res = spawnSync(cmd, args, spawnOpts);
+  if (capture && fd !== null) {
+    fs.closeSync(fd);
+    var output = fs.readFileSync(spawnOpts.__tmp, 'utf8');
+    fs.rmSync(spawnOpts.__tmp, { force: true });
+  }
+  if (res.error) fail(`无法执行 ${cmd}：${res.error.message}`);
+  const status = res.status ?? 1;
+  if (status !== 0 && !allowFail) fail(`${cmd} ${args.join(' ')} 失败（exit ${status}）\n${(output ?? '').trim()}`);
+  return { status, output: output ?? '' };
 }
+
+/** 跑 npm 命令（Windows 上绕开 npm.cmd 的 EINVAL）。 */
+const npm = (args, opts) => (hasNpmCli ? run(process.execPath, [NPM_CLI, ...args], opts) : npm(args, opts));
 
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
@@ -83,13 +96,13 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** 这个版本在 registry 上可见吗？ */
 function published(version) {
-  const res = run(NPM, ['view', `${pkgName}@${version}`, 'version'], { capture: true, allowFail: true });
+  const res = npm(['view', `${pkgName}@${version}`, 'version'], { capture: true, allowFail: true });
   return res.status === 0 && res.output.includes(version);
 }
 
 /** 用 registry 的发布时间当索引时间戳；取不到就用当前时间。 */
 function publishTimestamp(version) {
-  const res = run(NPM, ['view', pkgName, 'time', '--json'], { capture: true, allowFail: true });
+  const res = npm(['view', pkgName, 'time', '--json'], { capture: true, allowFail: true });
   if (res.status === 0) {
     try {
       const stamp = JSON.parse(res.output)[version];
@@ -133,7 +146,7 @@ step(1, TOTAL, '发版前校验');
   if (untracked) say(`  ! 有未跟踪文件（不会进本次提交）：${untracked.split('\n').slice(0, 3).join(', ')}`);
 
   // npm 登录态
-  const who = run(NPM, ['whoami'], { capture: true, allowFail: true });
+  const who = npm(['whoami'], { capture: true, allowFail: true });
   if (who.status !== 0) fail('npm 未登录', '先跑 npm login，或配置 //registry.npmjs.org/:_authToken');
   say(`  ✓ npm 已登录：${who.output.trim()}`);
 
@@ -145,7 +158,7 @@ step(1, TOTAL, '发版前校验');
 // ── 2. 检查与测试 ─────────────────────────────────────────────────────────
 
 step(2, TOTAL, '语法检查 + 引擎测试');
-run(NPM, ['run', 'check']);
+npm(['run', 'check']);
 run(process.execPath, ['--import', './tests/register-vendor.mjs', '--test', 'tests/engine.test.mjs']);
 
 if (dryRun) {
@@ -166,7 +179,7 @@ step(4, TOTAL, 'npm publish');
 {
   const args = ['publish'];
   if (otp) args.push('--otp', otp);
-  const res = run(NPM, args, { capture: true, allowFail: true });
+  const res = npm(args, { capture: true, allowFail: true });
   if (res.status !== 0) {
     writeJson(PKG_PATH, { ...pkg, version: current }); // 回滚版本号，别留下脏状态
     if (/EOTP|one-time password/i.test(res.output)) {
