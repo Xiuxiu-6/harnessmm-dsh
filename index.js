@@ -25,6 +25,7 @@
  * the durable session log.
  */
 import Schema from '@deepseek-ai/schemastery';
+import { appendFile } from 'node:fs/promises';
 import {
   GuardedReuseController, planInstruction,
   validatePolicy, sha256,
@@ -123,7 +124,10 @@ export function apply(ctx, config = {}) {
     policy,
     minimumChain: resolved.minimumChain,
     record: event => {
-      admissions.push(event);
+      // Every recorded event carries its own timestamp, so the trail and the
+      // diagnosis tools agree on when something happened.
+      const stamped = { at: new Date().toISOString(), ...event };
+      admissions.push(stamped);
       if (admissions.length > 2000) admissions.splice(0, admissions.length - 2000);
       if (event.kind === 'gdr/bank-authored') {
         if (event.admitted) counters.banksAuthored += 1;
@@ -133,25 +137,42 @@ export function apply(ctx, config = {}) {
       if (event.kind === 'gdr/defer') counters.deferrals += 1;
       if (event.kind === 'gdr/substitution-certificate') counters.certificates += 1;
       if (event.kind === 'gdr/uncertified-execution') counters.uncertified += 1;
-      for (const listener of auditListeners) listener(event);
+      for (const listener of auditListeners) listener(stamped);
     },
   });
 
   /* ------------------------------------------------------------------ audit */
 
-  ctx.inject(['fs'], fsCtx => {
-    if (!resolved.auditLog) return () => {};
-    const path = auditPath();
-    const handle = fsCtx.fs.resolve(path);
-    return fsCtx.effect(() => {
-      const listener = event => {
-        handle.then(target => fsCtx.fs.writeText(target, `${JSON.stringify({ at: new Date().toISOString(), ...event })}\n`, { mode: 'append' }))
-          .catch(() => { /* audit is best effort; it never affects a request or a tool call */ });
-      };
-      auditListeners.add(listener);
-      return () => { auditListeners.delete(listener); };
+  // The audit trail is the PLUGIN's own file, not a model-controlled path, so
+  // it is written with the host's own filesystem rather than through
+  // `ctx.fs`. Two reasons:
+  //
+  //  * `ctx.fs.writeText` REPLACES the whole file. Its `expected` argument is
+  //    an FsWriteIntent (`createIfAbsent` | `replaceIfVersion`), not a write
+  //    mode, so `{ mode: 'append' }` was silently ignored and every event
+  //    overwrote the previous one.
+  //  * `ctx.fs` is the SANDBOXED model-facing filesystem. Under the default
+  //    `workspace-write` mode it refuses any write outside the session
+  //    workspace and the platform temp roots, so the trail at `$DSH_HOME`
+  //    was denied outright and never written at all.
+  //
+  // The path is fixed and not derived from model output.
+  const auditFile = auditPath();
+  let auditQueue = Promise.resolve();
+  const auditListener = event => {
+    const line = `${JSON.stringify(event)}\n`;
+    auditQueue = auditQueue.then(async () => {
+      await appendFile(auditFile, line);
+    }).catch((error) => {
+      // The trail is best effort, but a failure to write it is worth
+      // reporting once: a silent catch is what hid this path for so long.
+      ctx.logger?.warn?.(`harnessmm: audit write failed: ${error?.message ?? error}`);
     });
-  });
+  };
+  if (resolved.auditLog) {
+    auditListeners.add(auditListener);
+    ctx.effect(() => () => { auditListeners.delete(auditListener); });
+  }
 
   /* ------------------------------------------------------- system prompt text */
 
@@ -249,6 +270,17 @@ export function apply(ctx, config = {}) {
       render: (_args, value) => [{ type: 'text', text: JSON.stringify(value, null, 2) }],
     },
     async execute() {
+      // The most recent rejection reasons, so a user who sees
+      // `invalidBanks` climbing can tell WHICH contract rule was broken
+      // without attaching a debugger.
+      const reasons = admissions
+        .filter(event => event.kind === 'gdr/invalid-bank' || event.kind === 'gdr/bank-authored' && !event.admitted)
+        .slice(-10)
+        .map(event => ({
+          kind: event.kind,
+          reason: event.error ?? (event.admitted ? null : `chain_depth_${event.chain_depth}_below_minimum_${resolved.minimumChain}`),
+          at: event.at ?? null,
+        }));
       return {
         enabled: resolved.enabled,
         policy: { ...policy },
@@ -258,6 +290,7 @@ export function apply(ctx, config = {}) {
         counters,
         pendingActions: [...controller.sessions.values()].reduce((total, state) => total + state.pending.size, 0),
         certificates: admissions.filter(event => event.kind === 'gdr/substitution-certificate').length,
+        recentRejections: reasons,
       };
     },
   }));
@@ -282,12 +315,21 @@ export function apply(ctx, config = {}) {
       return {
         total: certificates.length,
         scope: 'One certificate records one actually bypassed reasoning callback, not a measured counterfactual trajectory cost.',
+        // A tool result must be losslessly JSON-serializable, so every field
+        // here has to be present. The certificate record carries no timestamp
+        // of its own (the audit listener stamps one) and its optional members
+        // may be absent, so each is read with a defined fallback.
         receipts: certificates.slice(-limit).map(item => ({
-          at: item.at, session: item.session, candidate: item.candidate_id,
-          tool: item.exact_native_tool, arguments: item.exact_arguments,
-          guard: item.guard, guardFields: item.guard_fields,
-          nativeReceiptSha256: item.native_receipt_sha256, isError: item.is_error,
-          bankSha256: item.bank_sha256,
+          at: item.at ?? null,
+          session: item.session ?? null,
+          candidate: item.candidate_id ?? null,
+          tool: item.exact_native_tool ?? null,
+          arguments: item.exact_arguments ?? null,
+          guard: item.guard ?? null,
+          guardFields: item.guard_fields ?? null,
+          nativeReceiptSha256: item.native_receipt_sha256 ?? null,
+          isError: item.is_error ?? false,
+          bankSha256: item.bank_sha256 ?? null,
         })),
       };
     },
@@ -296,9 +338,18 @@ export function apply(ctx, config = {}) {
   return () => { controller.sessions.clear(); };
 }
 
-/** Audit trail location, kept outside the workspace so it never dirties a repo. */
+/**
+ * Audit trail location, kept outside the workspace so it never dirties a repo.
+ *
+ * The desktop Host does not export DSH_HOME to its plugins, so the path is
+ * resolved from the user's home directory the way the harness itself does:
+ * `~/.dsh` is the harness home, and the trail belongs beside the other
+ * harness state rather than loose in `$HOME`.
+ */
 function auditPath() {
-  const home = process.env.DSH_HOME || process.env.USERPROFILE || process.env.HOME || process.cwd();
+  const home = process.env.DSH_HOME
+    || process.env.USERPROFILE
+    || (process.env.HOME ? `${process.env.HOME}/.dsh` : process.cwd());
   return `${home}/harnessmm-audit.jsonl`;
 }
 

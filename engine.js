@@ -85,6 +85,11 @@ export function planInstruction(policy, tools) {
     + 'dependency_ids are "root" or an earlier candidate_id. Author 2-8 useful future '
     + `native calls whose every argument is already fully determined (at most ${policy.maximum_candidates}). `
     + `Each tool must be one of: ${names.join(', ') || '(none)'}. `
+    + 'CRITICAL: a candidate describes an action you have NOT run yet. The tool call '
+    + 'you make right now is the root, and a candidate must never repeat it — '
+    + 'plan the steps that come AFTER it. If you are about to run "ls", do not put '
+    + '"ls" in the bank; put the reads or commands you will run once "ls" returns. '
+    + 'A candidate that repeats the root is rejected and the whole bank is discarded. '
     + 'Never leave placeholders: if a parameter depends on an unseen result, omit that candidate. '
     + 'A guard is a conjunction of return_code (integer), stdout_contains (literal string), '
     + 'stdout_equals (literal string), stderr_empty (boolean), or json_equals '
@@ -176,23 +181,92 @@ export function parseBank(message, policy, tools = []) {
   };
 }
 
+/**
+ * The receipt fields a plain-text tool result exposes.
+ *
+ * The research harness this plugin was ported from ran its own exec tool, which
+ * returned a JSON observation carrying `stdout` / `stderr` / `return_code`.
+ * DeepSeek Harness's own tools return rendered text instead, so the JSON-only
+ * guard vocabulary could never match against them.
+ *
+ * These are the textual counterparts of the same public facts. They stay
+ * deterministic (exact string comparison, never a guess) and stay within the
+ * paper's contract: a guard is a conjunction of public receipt facts.
+ */
+const TEXT_FIELDS = {
+  stdout_contains: 'stdout',
+  stdout_equals: 'stdout',
+  stderr_empty: 'stderr',
+  json_equals: 'stdout',
+};
+
+/** DeepSeek Harness's bash rendering appends the exit status as a marker line. */
+const EXIT_MARKER = /\n?\[exit code: (-?\d+)\]\s*$/;
+/** DeepSeek Harness's bash rendering labels the stderr section. */
+const STDERR_SECTION = '[stderr]\n';
+
+/**
+ * Read one receipt as a DeepSeek Harness plain-text tool result.
+ *
+ * `text` is the exact tool output the model saw. The bash tool renders it as
+ * stdout, then an optional `[stderr]` section, then optional exit markers. The
+ * exit marker is only present for a non-zero exit, so an absent marker means a
+ * successful run.
+ *
+ * The exit marker is anchored to the END of the output, because that is where
+ * the renderer puts it. A command whose own stdout happens to end with that
+ * literal line is then read as the exit status it looks like; that is the
+ * documented rendering, not a guess.
+ *
+ * @param text - the exact rendered tool output.
+ * @returns the text-shaped receipt view.
+ */
+function textReceipt(text) {
+  let stdout = text;
+  let stderr = '';
+  let returnCode = 0;
+
+  const exit = EXIT_MARKER.exec(stdout);
+  if (exit) {
+    returnCode = Number(exit[1]);
+    stdout = stdout.slice(0, exit.index).replace(/\n$/, '');
+  }
+  const section = stdout.indexOf(STDERR_SECTION);
+  if (section !== -1) {
+    stderr = stdout.slice(section + STDERR_SECTION.length);
+    stdout = stdout.slice(0, section).replace(/\n$/, '');
+  }
+  return { stdout, stderr, return_code: returnCode };
+}
+
 /** Evaluate one receipt guard deterministically. Mirrors `localGuard` (v6). */
 export function localGuard(node, receipt) {
   const guard = node?.guard;
   if (!object(guard) || !Object.keys(guard).length) {
     return { known: false, eligible: false, reason: 'invalid_guard' };
   }
-  let value = receipt?.value?.native_text ?? receipt?.value;
+  const raw = receipt?.value?.native_text ?? receipt?.value;
+  let value = raw;
+  let parsed = true;
   for (let depth = 0; depth < 3 && typeof value === 'string'; depth++) {
     try {
       value = JSON.parse(value);
     } catch {
-      return { known: false, eligible: false, reason: 'non_json_receipt' };
+      parsed = false;
+      break;
     }
+  }
+  // A non-JSON receipt is a plain-text tool result. The paper's guards are
+  // defined over public receipt fields, and the textual counterparts carry
+  // the same facts, so the guard is evaluated against them instead of being
+  // rejected outright.
+  if (!parsed) {
+    if (typeof raw !== 'string') return { known: false, eligible: false, reason: 'missing_receipt' };
+    value = textReceipt(raw);
   }
   if (!object(value)) return { known: false, eligible: false, reason: 'missing_receipt' };
   if (receipt?.is_error) return { known: true, eligible: false, reason: 'native_error' };
-  const fields = { return_code: 'return_code', stdout_contains: 'stdout', stdout_equals: 'stdout', stderr_empty: 'stderr', json_equals: 'stdout' };
+  const fields = { return_code: 'return_code', ...TEXT_FIELDS };
   const required = node.required_receipt_fields;
   if (!Array.isArray(required) || required.some(key => !Object.hasOwn(value, key))
     || Object.keys(guard).some(key => !fields[key] || !required.includes(fields[key]))) {
@@ -366,7 +440,19 @@ export class GuardedReuseController {
   /** Decide the next native action for this boundary, or null to run slow. */
   async prepare({ sessionId, options, tools }) {
     const state = this.state(sessionId);
-    const decision = decisionState(options.messages, this.policy, tools);
+    // `decisionState` re-parses the bank out of the durable request history.
+    // A bank that was rejected when it was authored is still in that history,
+    // so it fails to parse again here. Letting that error escape would fail
+    // the model request instead of falling back to the slow actor, so one
+    // malformed bank would poison every later request in the session.
+    let decision;
+    try {
+      decision = decisionState(options.messages, this.policy, tools);
+    } catch (error) {
+      if (!(error instanceof BankContractError)) throw error;
+      this.record({ kind: 'gdr/invalid-bank', session: state.key, error: error.message });
+      return null;
+    }
     if (!decision?.bank) return null;
     const bank = decision.bank;
     if (!state.banks.has(bank.sha256)) {

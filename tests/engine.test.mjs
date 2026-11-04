@@ -1,4 +1,4 @@
-﻿// Host contract tests for the productized GDR/CCS port. No model calls:
+// Host contract tests for the productized GDR/CCS port. No model calls:
 // the "slow actor" and the "native dispatcher" are scripted by the test.
 // The module under test is the one the installed bundle ships.
 import assert from 'node:assert/strict';
@@ -83,7 +83,11 @@ test('guards are evaluated deterministically against the native receipt', () => 
   assert.equal(localGuard(n, { value: { return_code: 0, stdout: 'NO', stderr: null } }).reason, 'guard_false');
   assert.equal(localGuard(n, { is_error: true, value: { return_code: 0, stdout: 'OK' } }).reason, 'native_error');
   assert.equal(localGuard(n, { value: { stdout: 'OK' } }).reason, 'required_field_missing');
-  assert.equal(localGuard(n, { value: 'not json' }).known, false);
+  // A plain-text receipt is read as a DeepSeek Harness tool result rather
+  // than rejected outright. See tests/receipt-shape.test.mjs for the full
+  // plain-text contract.
+  assert.equal(localGuard(n, { value: 'OK' }).eligible, true);
+  assert.equal(localGuard(n, { value: 'NO' }).reason, 'guard_false');
 });
 
 test('json_equals reads a nested path and refuses prototype keys', () => {

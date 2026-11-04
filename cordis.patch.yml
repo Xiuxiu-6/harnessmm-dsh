@@ -3,7 +3,10 @@
       name: 'dsh-plugin-harnessmm'
       config:
         enabled: true
-        minimumChain: 2
+        # One already-decided future action is enough to save one reasoning
+        # request, so the chain requirement is kept at its minimum here. The
+        # upstream default is 2.
+        minimumChain: 1
         maximumCandidates: 16
         maximumFastSteps: 8
         injectPlanInstruction: true

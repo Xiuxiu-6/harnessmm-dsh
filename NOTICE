@@ -49,5 +49,47 @@ to upstream:
     rewrite are not implemented; the authored plan stays in the conversation
     as ordinary assistant text.
 
+Deployment fixes
+----------------
+
+The port above passed its own test suite, but those tests validated against
+hand-written simplified tool schemas. On a real DeepSeek Harness deployment the
+plugin did nothing at all: authored banks were counted, but no action was ever
+reused. The following defects were found by live verification and fixed. Each
+one has a test that pins it.
+
+  * Guards could never match. The guard vocabulary (return_code / stdout /
+    stderr) was defined against the research harness's exec tool, which
+    returned a JSON observation. DeepSeek Harness's own tools return rendered
+    text: `bash` renders stdout, an optional `[stderr]` section, and a
+    trailing `[exit code: N]` marker for a non-zero exit; `read` renders
+    line-numbered lines. The guard evaluator now reads that actual rendering.
+    The comparison stays an exact string comparison; no guessing was
+    introduced, and the paper's contract (a guard is a conjunction of public
+    receipt facts) is unchanged.
+  * One malformed action bank poisoned the rest of a session. The authoring
+    path caught a contract violation but the request path did not, and the
+    decision state is re-parsed out of the durable request history. The
+    throw escaped the `llm/stream` waterfall, so the model request failed
+    instead of falling back to the slow actor.
+  * The audit trail overwrote itself: the filesystem service replaces the
+    whole file, and its write-intent argument is not a write mode, so an
+    append option was ignored. The trail now uses the host's own filesystem,
+    because the model-facing filesystem is sandboxed and refuses writes
+    outside the session workspace.
+  * `harnessmm_receipts` failed exactly when a certificate existed: the
+    certificate record carries no timestamp of its own, so the tool result
+    held a value that is not losslessly JSON-serializable.
+  * The audit trail landed outside the harness home, because the desktop Host
+    does not export its home directory to plugins.
+  * The plan instruction did not say that a candidate describes an action the
+    model has NOT run yet, and that the call being made now is the root. A
+    model that planned its own current call had its whole bank rejected. The
+    contract was already enforced; the instruction simply did not say so.
+
+Every recorded event now also carries its own timestamp, and `harnessmm_status`
+reports the last rejection reasons, so a rising rejection counter says WHICH
+contract rule was broken instead of leaving it to guesswork.
+
 No HarnessMM benchmark results, measured token savings, or published numbers
 are reproduced here or claimed by this plugin.
