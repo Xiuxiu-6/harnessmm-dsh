@@ -1,7 +1,7 @@
 # Plugin market index
 
 `index.json` is a [format-1 plugin market index](https://github.com/Xiuxiu-6/harnessmm-dsh/blob/main/market/index.json)
-for DSH's **Discover** tab. It lists `dsh-plugin-harnessmm` and installs it
+for DSH's **Discover** tab. It lists `harnessmm-dsh` and installs it
 straight from this repository, pinned to a commit.
 
 ## Add it
@@ -26,7 +26,7 @@ language the index declares. For this index, any of these find the plugin:
 
 | Query | Matches through |
 |---|---|
-| `harnessmm` | package name `dsh-plugin-harnessmm`, keyword `harnessmm` |
+| `harnessmm` | package name `harnessmm-dsh`, keyword `harnessmm` |
 | `decision reuse` / `决策复用` | keyword + label + title |
 | `Xiuxiu-6` | author |
 | `panel` / `面板` | label + description |

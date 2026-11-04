@@ -16,7 +16,7 @@
  */
 import { createPanel, pollStatus } from './view.js';
 
-const TAB_ID = 'dsh-plugin-harnessmm';
+const TAB_ID = 'harnessmm-dsh';
 const TAB_KIND = 'harnessmm';
 // 对话页签条：上下文 20、编队 30，所以 40 排在编队后面。
 const VIEW_ID = 'harnessmm';

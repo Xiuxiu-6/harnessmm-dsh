@@ -1,6 +1,6 @@
 # HarnessMM 决策复用面板
 
-给 `dsh-plugin-harnessmm` 加一个只读的可视化面板，**面板上每个数字都能追溯到插件的具体内部状态**。
+给 `harnessmm-dsh` 加一个只读的可视化面板，**面板上每个数字都能追溯到插件的具体内部状态**。
 
 ---
 
@@ -91,7 +91,7 @@ banksAuthored > 0  → B 已授权·等待命中
 ### 4.1 复制文件到插件目录
 
 把本目录下这些文件复制到
-`~/.dsh/profiles/<你的 profile>/node_modules/dsh-plugin-harnessmm/`：
+`~/.dsh/profiles/<你的 profile>/node_modules/harnessmm-dsh/`：
 
 ```
 panel.js          新增

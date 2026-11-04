@@ -49,7 +49,7 @@
   },
   "plugins": [
     {
-      "name": "dsh-plugin-harnessmm",
+      "name": "harnessmm-dsh",
       "title": {
         "en": "HarnessMM — Guarded Decision Reuse",
         "zh": "HarnessMM 决策复用"

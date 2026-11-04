@@ -1,5 +1,5 @@
 /* HarnessMM 面板客户端 —— 由 build-client.mjs 生成，勿手改 */
-window.__ModuleLoader__.load({id:'dsh-plugin-harnessmm',factory:function(require){
+window.__ModuleLoader__.load({id:'harnessmm-dsh',factory:function(require){
 var __hmmRequire = typeof require === 'function' ? require : null;
 var HarnessMMClient = (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
@@ -373,7 +373,7 @@ var HarnessMMClient = (function(exports) {
     <div class="col-side">
       <section class="card" id="metaCard">
         ${cardHead(ICONS.info, "插件信息", "", "")}
-        <div class="kv"><span class="k">插件</span><span class="v">dsh-plugin-harnessmm</span></div>
+        <div class="kv"><span class="k">插件</span><span class="v">harnessmm-dsh</span></div>
         <div class="kv"><span class="k">策略</span><span class="v" id="metaPolicy">—</span></div>
         <div class="kv"><span class="k">上限</span><span class="v" id="metaLimit">—</span></div>
         <div class="kv"><span class="k">最小链深</span><span class="v" id="metaChain">—</span></div>
@@ -1160,7 +1160,7 @@ var HarnessMMClient = (function(exports) {
 	*   页签里就是一片空白 —— 这就是重启后面板白屏的原因。
 	*   同理不能用 hooks：hooks 的 dispatcher 属于宿主 React 实例。
 	*/
-	const TAB_ID = "dsh-plugin-harnessmm";
+	const TAB_ID = "harnessmm-dsh";
 	const TAB_KIND = "harnessmm";
 	const VIEW_ID = "harnessmm";
 	const VIEW_ORDER = 40;

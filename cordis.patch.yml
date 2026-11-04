@@ -1,6 +1,6 @@
 - insert:
     - id: harnessmm-guarded-reuse
-      name: 'dsh-plugin-harnessmm'
+      name: 'harnessmm-dsh'
       config:
         enabled: true
         minimumChain: 2

@@ -1,4 +1,4 @@
-# dsh-plugin-harnessmm
+# harnessmm-dsh
 
 **Guarded decision reuse for the DeepSeek Harness.** The model writes down already-decided
 tool actions once; when the previous tool result satisfies the guard it wrote for them,
@@ -150,7 +150,7 @@ Set these under the `harnessmm-guarded-reuse` row in your profile's `cordis.patc
 
 ```yaml
 - id: harnessmm-guarded-reuse
-  name: 'dsh-plugin-harnessmm'
+  name: 'harnessmm-dsh'
   config:
     enabled: true
     minimumChain: 2
