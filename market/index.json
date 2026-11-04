@@ -1,0 +1,100 @@
+{
+  "format": 1,
+  "title": {
+    "en": "HarnessMM Plugin Market",
+    "zh": "HarnessMM 插件市场"
+  },
+  "description": {
+    "en": "Plugins published from Xiuxiu-6/harnessmm-dsh.",
+    "zh": "由 Xiuxiu-6/harnessmm-dsh 发布的插件。"
+  },
+  "metadata": {
+    "categories": {
+      "observability": {
+        "title": {
+          "en": "Observability",
+          "zh": "可观测性"
+        }
+      },
+      "efficiency": {
+        "title": {
+          "en": "Efficiency",
+          "zh": "效率"
+        }
+      }
+    },
+    "labels": {
+      "decision-reuse": {
+        "title": {
+          "en": "Decision reuse",
+          "zh": "决策复用"
+        }
+      },
+      "panel": {
+        "title": {
+          "en": "Panel",
+          "zh": "可视化面板"
+        }
+      }
+    },
+    "sortKeys": {
+      "savedRequests": {
+        "title": {
+          "en": "Saved reasoning requests",
+          "zh": "节省的推理请求"
+        },
+        "order": "desc"
+      }
+    }
+  },
+  "plugins": [
+    {
+      "name": "dsh-plugin-harnessmm",
+      "title": {
+        "en": "HarnessMM — Guarded Decision Reuse",
+        "zh": "HarnessMM 决策复用"
+      },
+      "description": {
+        "en": "The model writes already-decided tool actions down once; when the previous tool result satisfies the guard it wrote, those actions run through the native tools without another reasoning request. Ships a read-only panel where every number traces back to the plugin state it came from.",
+        "zh": "模型把已经想好的工具动作一次性写成动作库，上一步回执满足它自己写的守卫时，这些动作直接经原生工具执行，不再发起一次推理请求。附带只读面板，每个数字都能追溯回它来自的插件内部状态。"
+      },
+      "icon": "../icon.svg",
+      "author": "Xiuxiu-6",
+      "homepage": "https://github.com/Xiuxiu-6/harnessmm-dsh#readme",
+      "repository": {
+        "url": "https://github.com/Xiuxiu-6/harnessmm-dsh"
+      },
+      "metadata": {
+        "category": "efficiency",
+        "keywords": [
+          "harnessmm",
+          "decision-reuse",
+          "guarded reuse",
+          "token efficiency",
+          "panel",
+          "observability",
+          "决策复用",
+          "省 token"
+        ],
+        "labels": [
+          "decision-reuse",
+          "panel"
+        ]
+      },
+      "versions": [
+        {
+          "version": "1.1.0",
+          "publishTimestamp": 1793773517,
+          "source": {
+            "type": "git",
+            "url": "https://github.com/Xiuxiu-6/harnessmm-dsh",
+            "commit": "70360f876636176dc5649caf1ac6e4f052ec4958"
+          },
+          "engines": {
+            "dsh": ">=0.2.1-rc.1"
+          }
+        }
+      ]
+    }
+  ]
+}
