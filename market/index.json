@@ -88,7 +88,7 @@
           "source": {
             "type": "git",
             "url": "https://github.com/Xiuxiu-6/harnessmm-dsh",
-            "commit": "70360f876636176dc5649caf1ac6e4f052ec4958"
+            "commit": "659bd9ce3d3be22ba5cf45964e18025afd77459a"
           },
           "engines": {
             "dsh": ">=0.2.1-rc.1"
