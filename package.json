@@ -1,12 +1,15 @@
 {
   "name": "dsh-plugin-harnessmm",
-  "version": "1.0.0",
-  "description": "Guarded decision reuse for the DeepSeek Harness: the model authors already-decided tool actions once, and receipt-supported ones execute through the native tools without another reasoning request.",
+  "version": "1.1.0",
+  "description": "Guarded decision reuse for the DeepSeek Harness: the model authors already-decided tool actions once, and receipt-supported ones execute through the native tools without another reasoning request. Ships a read-only decision-reuse panel with per-number data provenance.",
   "type": "module",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
     "./engine": "./engine.js",
+    "./panel": "./panel.js",
+    "./snapshot": "./snapshot.js",
+    "./client": "./client.js",
     "./package.json": "./package.json",
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg"
@@ -14,6 +17,11 @@
   "files": [
     "index.js",
     "engine.js",
+    "panel.js",
+    "snapshot.js",
+    "web-routes.js",
+    "panel.html",
+    "client.js",
     "cordis.patch.yml",
     "locale/*.json",
     "icon.svg",
@@ -23,12 +31,19 @@
     "NOTICE"
   ],
   "scripts": {
-    "check": "node --check index.js && node --check engine.js",
+    "check": "node --check index.js && node --check engine.js && node --check panel.js && node --check snapshot.js && node --check web-routes.js && node --check client.js",
     "test": "node --import ./tests/register-vendor.mjs --test tests/*.test.mjs"
   },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-sidebar-right"
+      ],
+      "platform": "web"
     }
   },
   "peerDependencies": {
@@ -51,7 +66,9 @@
     "agent",
     "token-efficiency",
     "decision-reuse",
-    "harnessmm"
+    "harnessmm",
+    "panel",
+    "observability"
   ],
   "repository": {
     "type": "git",

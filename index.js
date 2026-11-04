@@ -29,6 +29,7 @@ import {
   GuardedReuseController, planInstruction,
   validatePolicy, sha256,
 } from './engine.js';
+import { installPanel } from './panel.js';
 
 export const name = 'harnessmm-guarded-reuse';
 export const inject = ['tools', 'systemPrompt'];
@@ -293,7 +294,21 @@ export function apply(ctx, config = {}) {
     },
   }));
 
-  return () => { controller.sessions.clear(); };
+  /* ---------------------------------------------------------------- panel */
+
+  // Read-only decision-reuse panel. Registers /plugins/harnessmm/{status,panel,health}
+  // on the Web server. Every number it shows traces back to `controller`,
+  // `counters` or `admissions` above — see snapshot.js provenance.
+  const disposePanel = installPanel(ctx, {
+    controller, counters, policy, admissions, startedAt: started,
+    minimumChain: resolved.minimumChain,
+    config: resolved,
+  });
+
+  return () => {
+    disposePanel();
+    controller.sessions.clear();
+  };
 }
 
 /** Audit trail location, kept outside the workspace so it never dirties a repo. */
