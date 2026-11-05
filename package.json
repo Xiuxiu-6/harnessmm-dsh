@@ -1,6 +1,6 @@
 {
   "name": "harnessmm-dsh",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Guarded decision reuse for the DeepSeek Harness: the model authors already-decided tool actions once, and receipt-supported ones execute through the native tools without another reasoning request. Ships a read-only decision-reuse panel with per-number data provenance.",
   "type": "module",
   "main": "index.js",
