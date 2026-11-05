@@ -196,7 +196,9 @@ test('a guard that does not hold returns control to the slow actor', async () =>
 
 test('two eligible successors defer to the slow actor instead of guessing', async () => {
   const events = [];
-  const controller = new GuardedReuseController({ policy, record: event => events.push(event) });
+  // 这个用例测的是「两个候选都合格时不要猜」，与链深无关；
+  // 这里的 bank 只有 1 步，所以要显式把 minimumChain 放到 1。
+  const controller = new GuardedReuseController({ policy, minimumChain: 1, record: event => events.push(event) });
   const sessionId = 'session-3';
   const messages = [
     { role: 'user', content: [{ type: 'text', text: 'go' }] },
@@ -213,7 +215,8 @@ test('two eligible successors defer to the slow actor instead of guessing', asyn
 
 test('a mismatched native action is never certified', async () => {
   const events = [];
-  const controller = new GuardedReuseController({ policy, record: event => events.push(event) });
+  // 测的是「原生调用被篡改就不发证书」，与链深无关；bank 只有 1 步。
+  const controller = new GuardedReuseController({ policy, minimumChain: 1, record: event => events.push(event) });
   const sessionId = 'session-4';
   const messages = [
     { role: 'user', content: [{ type: 'text', text: 'go' }] },

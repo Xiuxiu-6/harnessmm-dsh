@@ -300,6 +300,47 @@ test('an unknown substitution call id is never certified', async () => {
   assert.equal(status.counters.uncertified, 0);
 });
 
+// 回归：minimumChain 曾经只在 author() 里生效，执行阶段完全不受约束。
+// author() 判定 admitted=false（链深 1 < 2），但 prepare() 从消息历史里重建 bank
+// 时会绕过那道闸门，admitStep() 又从来没比较过 minimumChain，于是单步动作库
+// 照样编译成原生调用并执行 —— 契约「bank 需要 ≥ minimumChain 个后续回调」形同虚设。
+test('minimumChain 在执行阶段也生效：链深不足的动作库不能接管推理', async () => {
+  const host = makeHost();
+  plugin.apply(host.ctx, { minimumChain: 2 });
+  const messages = [{ role: 'user', content: [{ type: 'text', text: 'go' }] }];
+
+  const stepOne = await driveStream(host, {
+    purpose: 'conversation', sessionId: 'chain-1', messages, tools: [readTool],
+  }, async function* () {
+    // 只有一个候选：root -> A，链深 1，达不到 minimumChain=2
+    yield { type: 'block-end', index: 0, block: { type: 'text', text: PLAN([node('A', 'root', { file_path: 'a.ts' })]) } };
+    yield { type: 'block-end', index: 1, block: { type: 'tool-call', id: 'root', name: 'read', arguments: '{}' } };
+    yield { type: 'finish', reason: { kind: 'tool-calls' } };
+  });
+  messages.push(
+    { role: 'assistant', content: stepOne.filter(chunk => chunk.type === 'block-end').map(chunk => chunk.block) },
+    { role: 'tool', toolCallId: 'root', content: [{ type: 'text', text: '{"return_code":0,"stdout":"ok","stderr":null}' }] },
+  );
+
+  let called = 0;
+  const stepTwo = await driveStream(host, {
+    purpose: 'conversation', sessionId: 'chain-1', messages, tools: [readTool],
+  }, async function* () {
+    called += 1;
+    yield { type: 'finish', reason: { kind: 'stop' } };
+  });
+
+  assert.equal(called, 1, '链深不足时必须回落到慢速模型');
+  assert.equal(
+    stepTwo.some(chunk => String(chunk.block?.id ?? '').startsWith('gdr_')),
+    false,
+    '不能编译出任何替换调用',
+  );
+  const status = await host.tools.get('harnessmm_status').execute({});
+  assert.equal(status.counters.substitutions, 0);
+  assert.equal(status.counters.guardMisses, 1, '被链深拦下的决策点要计入命中率分母');
+});
+
 test('an ordinary tool result is not certified', async () => {
   const host = makeHost();
   plugin.apply(host.ctx, {});

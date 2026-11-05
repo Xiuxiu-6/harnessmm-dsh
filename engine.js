@@ -391,6 +391,27 @@ export class GuardedReuseController {
     const decision = decisionState(options.messages, this.policy, tools);
     if (!decision?.bank) return null;
     const bank = decision.bank;
+
+    // 链深闸门必须在执行阶段再判一次。
+    //
+    // `author()` 用 `chainDepth >= minimumChain` 决定要不要「存」，但这里是从
+    // 对话历史里重建 bank（`gdr/bank-recovered`），完全绕过了那道闸门；
+    // `admitStep()` 也从头到尾没有比较过 minimumChain，只是把它原样返回。
+    // 结果就是：作者阶段判为 admitted=false 的单步动作库，下一轮照样被编译成
+    // 原生调用并执行 —— minimumChain 实际只约束存储，不约束执行。
+    const chain = chainDepth(bank);
+    if (chain < this.minimumChain) {
+      this.record({
+        kind: 'gdr/pre-admission', session: state.key, bank_sha256: bank.sha256,
+        step: decision.steps,
+        eligible: [],
+        rejected: bank.candidates.map(candidate => ({ id: candidate.label, reason: 'chain_too_short' })),
+        public_bytes: 0, public_byte_limit: this.policy.maximum_public_bytes,
+        chain_depth: chain, minimum_chain: this.minimumChain,
+      });
+      return null;
+    }
+
     if (!state.banks.has(bank.sha256)) {
       state.banks.set(bank.sha256, bank);
       this.record({ kind: 'gdr/bank-recovered', session: state.key, bank_sha256: bank.sha256, steps: decision.steps });
