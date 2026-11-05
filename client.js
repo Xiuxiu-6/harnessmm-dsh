@@ -497,30 +497,6 @@ var HarnessMMClient = (function(exports) {
 			metaAudit: byId("metaAudit"),
 			provList: byId("provList")
 		};
-		/**
-		* 「内容没变就不写 DOM」。
-		*
-		* render() 每次都会把 13 个区块全部重建，而轮询是 2 秒一次、侧栏和对话页签各一份。
-		* 推理期间 `requests` 每走一步就 +1，指纹一变就整块重写 innerHTML —— 结果是面板
-		* 一直在闪、鼠标悬停被打断、事件列表的滚动位置也丢。
-		*
-		* 这里给每个区块节点套一层 innerHTML 代理：值完全相同就跳过，一个字节都不写。
-		* 值变了照旧覆盖，行为与原来一致。
-		*/
-		function lazyHTML(node) {
-			if (node === null || node === void 0) return node;
-			let last;
-			let primed = false;
-			return new Proxy(node, { set(target, prop, value) {
-				if (prop === "innerHTML") {
-					if (primed && last === value) return true;
-					last = value;
-					primed = true;
-				}
-				target[prop] = value;
-				return true;
-			} });
-		}
 		for (const key of Object.keys(el)) {
 			const node = el[key];
 			if (node !== null && typeof node === "object" && "innerHTML" in node) el[key] = lazyHTML(node);
@@ -1131,6 +1107,43 @@ var HarnessMMClient = (function(exports) {
 		};
 	}
 	/**
+	* 「内容没变就不写 DOM」。
+	*
+	* render() 每次都会把 13 个区块全部重建，而轮询是 2 秒一次、侧栏和对话页签各一份。
+	* 推理期间 `requests` 每走一步就 +1，指纹一变就整块重写 innerHTML —— 结果是面板
+	* 一直在闪、鼠标悬停被打断、事件列表的滚动位置也丢。
+	*
+	* 这里给每个区块节点套一层 innerHTML 代理：值完全相同就跳过，一个字节都不写。
+	* 值变了照旧覆盖，行为与原来一致。
+	*/
+	function lazyHTML(node) {
+		if (node === null || node === void 0) return node;
+		let last;
+		let primed = false;
+		return new Proxy(node, {
+			/**
+			* 原生 DOM 方法对 `this` 做品牌检查（brand check），必须把方法绑回真节点。
+			* 不绑的话 `el.evRows.addEventListener(...)` 里的 this 是 Proxy，会抛
+			* `Illegal invocation` —— createPanel 在绑定事件时当场炸掉，面板只剩骨架屏，
+			* 而且错误写进 host.textContent 会被 shadow root 挡住，用户什么都看不到。
+			* 这个 get 陷阱就是为此存在的。
+			*/
+			get(target, prop) {
+				const value = target[prop];
+				return typeof value === "function" ? value.bind(target) : value;
+			},
+			set(target, prop, value) {
+				if (prop === "innerHTML") {
+					if (primed && last === value) return true;
+					last = value;
+					primed = true;
+				}
+				target[prop] = value;
+				return true;
+			}
+		});
+	}
+	/**
 	* 快照指纹：用来判断「这份快照值得重绘吗」。
 	*
 	* 不能直接比响应原文 —— `generatedAt` 每次都是新的毫秒时间戳，
@@ -1188,10 +1201,15 @@ var HarnessMMClient = (function(exports) {
 				const message = String(error?.message ?? error);
 				if (`offline:${message}` !== signature) {
 					signature = `offline:${message}`;
-					panel.render(offline(message));
+					try {
+						panel.render(offline(message));
+					} catch (renderError) {
+						console.error("[harnessmm] 面板渲染失败", renderError);
+					}
 				}
+			} finally {
+				if (!stopped) timer = setTimeout(tick, interval);
 			}
-			if (!stopped) timer = setTimeout(tick, interval);
 		};
 		tick();
 		return () => {
@@ -1399,7 +1417,12 @@ var HarnessMMClient = (function(exports) {
 			panel = createPanel(host, { onScopeChange: setScope });
 		} catch (error) {
 			console.error("[harnessmm] 面板挂载失败", error);
-			host.textContent = `HarnessMM 面板挂载失败：${error && error.message ? error.message : String(error)}`;
+			const message = `HarnessMM 面板挂载失败：${error && error.message ? error.message : String(error)}`;
+			const target = host.shadowRoot ?? host;
+			const box = document.createElement("div");
+			box.style.cssText = "padding:18px;font:13px/1.7 system-ui,sans-serif;color:#b4232c;white-space:pre-wrap";
+			box.textContent = message;
+			target.replaceChildren(box);
 			return;
 		}
 		const entry = {

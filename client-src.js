@@ -141,9 +141,17 @@ function mount(host) {
   try {
     panel = createPanel(host, { onScopeChange: setScope });
   } catch (error) {
-    // 面板自己崩了也不能连累宿主渲染：把原因写在页签里，别白屏。
+    // 面板自己崩了也不能连累宿主渲染：把原因写出来，别白屏。
     console.error('[harnessmm] 面板挂载失败', error);
-    host.textContent = `HarnessMM 面板挂载失败：${error && error.message ? error.message : String(error)}`;
+    const message = `HarnessMM 面板挂载失败：${error && error.message ? error.message : String(error)}`;
+    // 面板渲染在 shadow root 里，写 host.textContent 会被影子树挡住 ——
+    // 用户只会看到骨架屏永远停在「正在读取插件状态」，一个字的原因都看不到。
+    // 所以必须写进影子树本身。
+    const target = host.shadowRoot ?? host;
+    const box = document.createElement('div');
+    box.style.cssText = 'padding:18px;font:13px/1.7 system-ui,sans-serif;color:#b4232c;white-space:pre-wrap';
+    box.textContent = message;
+    target.replaceChildren(box);
     return;
   }
   const entry = { panel, release: acquirePolling(panel), observer: null };

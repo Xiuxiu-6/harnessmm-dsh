@@ -423,33 +423,6 @@ export function createPanel(host, options = {}) {
     provList: byId('provList'),
   };
 
-  /**
-   * 「内容没变就不写 DOM」。
-   *
-   * render() 每次都会把 13 个区块全部重建，而轮询是 2 秒一次、侧栏和对话页签各一份。
-   * 推理期间 `requests` 每走一步就 +1，指纹一变就整块重写 innerHTML —— 结果是面板
-   * 一直在闪、鼠标悬停被打断、事件列表的滚动位置也丢。
-   *
-   * 这里给每个区块节点套一层 innerHTML 代理：值完全相同就跳过，一个字节都不写。
-   * 值变了照旧覆盖，行为与原来一致。
-   */
-  function lazyHTML(node) {
-    if (node === null || node === undefined) return node;
-    let last;
-    let primed = false;
-    return new Proxy(node, {
-      set(target, prop, value) {
-        if (prop === 'innerHTML') {
-          if (primed && last === value) return true;
-          last = value;
-          primed = true;
-        }
-        target[prop] = value;
-        return true;
-      },
-    });
-  }
-
   for (const key of Object.keys(el)) {
     const node = el[key];
     if (node !== null && typeof node === 'object' && 'innerHTML' in node) el[key] = lazyHTML(node);
@@ -1024,6 +997,44 @@ export function createPanel(host, options = {}) {
 }
 
 /**
+ * 「内容没变就不写 DOM」。
+ *
+ * render() 每次都会把 13 个区块全部重建，而轮询是 2 秒一次、侧栏和对话页签各一份。
+ * 推理期间 `requests` 每走一步就 +1，指纹一变就整块重写 innerHTML —— 结果是面板
+ * 一直在闪、鼠标悬停被打断、事件列表的滚动位置也丢。
+ *
+ * 这里给每个区块节点套一层 innerHTML 代理：值完全相同就跳过，一个字节都不写。
+ * 值变了照旧覆盖，行为与原来一致。
+ */
+export function lazyHTML(node) {
+  if (node === null || node === undefined) return node;
+  let last;
+  let primed = false;
+  return new Proxy(node, {
+    /**
+     * 原生 DOM 方法对 `this` 做品牌检查（brand check），必须把方法绑回真节点。
+     * 不绑的话 `el.evRows.addEventListener(...)` 里的 this 是 Proxy，会抛
+     * `Illegal invocation` —— createPanel 在绑定事件时当场炸掉，面板只剩骨架屏，
+     * 而且错误写进 host.textContent 会被 shadow root 挡住，用户什么都看不到。
+     * 这个 get 陷阱就是为此存在的。
+     */
+    get(target, prop) {
+      const value = target[prop];
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+    set(target, prop, value) {
+      if (prop === 'innerHTML') {
+        if (primed && last === value) return true;
+        last = value;
+        primed = true;
+      }
+      target[prop] = value;
+      return true;
+    },
+  });
+}
+
+/**
  * 快照指纹：用来判断「这份快照值得重绘吗」。
  *
  * 不能直接比响应原文 —— `generatedAt` 每次都是新的毫秒时间戳，
@@ -1077,10 +1088,17 @@ export function pollStatus(panel, options = {}) {
       const message = String(error?.message ?? error);
       if (`offline:${message}` !== signature) {
         signature = `offline:${message}`;
-        panel.render(offline(message));
+        try {
+          panel.render(offline(message));
+        } catch (renderError) {
+          // 渲染自己炸了也不能让轮询停摆，否则面板永远停在上一帧。
+          console.error('[harnessmm] 面板渲染失败', renderError);
+        }
       }
+    } finally {
+      // 无论上面发生什么都要排下一次：面板卡在骨架屏上比报错更难查。
+      if (!stopped) timer = setTimeout(tick, interval);
     }
-    if (!stopped) timer = setTimeout(tick, interval);
   };
 
   tick();
