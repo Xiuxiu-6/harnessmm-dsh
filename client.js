@@ -377,7 +377,7 @@ var HarnessMMClient = (function(exports) {
       </section>
 
       <section class="card" id="eventCard">
-        ${cardHead(ICONS.pulse, "决策复用事件", "<b id=\"evTotal\">0</b> 条 · 审计日志同步", {
+        ${cardHead(ICONS.pulse, "决策复用事件", "<b id=\"evTotal\">0</b> 条 <span id=\"evSource\">· 审计日志同步</span>", {
 		label: "admissions",
 		title: "admissions 环形缓冲（上限 2000 条，超出后丢弃最旧记录）。完整记录另见 harnessmm-audit.jsonl。"
 	})}
@@ -486,6 +486,7 @@ var HarnessMMClient = (function(exports) {
 			trendDots: byId("trendDots"),
 			trendAxis: byId("trendAxis"),
 			evTotal: byId("evTotal"),
+			evSource: byId("evSource"),
 			evChips: byId("evChips"),
 			evRows: byId("evRows"),
 			evFoot: byId("evFoot"),
@@ -496,6 +497,34 @@ var HarnessMMClient = (function(exports) {
 			metaAudit: byId("metaAudit"),
 			provList: byId("provList")
 		};
+		/**
+		* 「内容没变就不写 DOM」。
+		*
+		* render() 每次都会把 13 个区块全部重建，而轮询是 2 秒一次、侧栏和对话页签各一份。
+		* 推理期间 `requests` 每走一步就 +1，指纹一变就整块重写 innerHTML —— 结果是面板
+		* 一直在闪、鼠标悬停被打断、事件列表的滚动位置也丢。
+		*
+		* 这里给每个区块节点套一层 innerHTML 代理：值完全相同就跳过，一个字节都不写。
+		* 值变了照旧覆盖，行为与原来一致。
+		*/
+		function lazyHTML(node) {
+			if (node === null || node === void 0) return node;
+			let last;
+			let primed = false;
+			return new Proxy(node, { set(target, prop, value) {
+				if (prop === "innerHTML") {
+					if (primed && last === value) return true;
+					last = value;
+					primed = true;
+				}
+				target[prop] = value;
+				return true;
+			} });
+		}
+		for (const key of Object.keys(el)) {
+			const node = el[key];
+			if (node !== null && typeof node === "object" && "innerHTML" in node) el[key] = lazyHTML(node);
+		}
 		const state = {
 			filter: "all",
 			open: /* @__PURE__ */ new Set(),
@@ -987,6 +1016,8 @@ var HarnessMMClient = (function(exports) {
 			const events = asArray(obj(data.events).recent);
 			const total = num(obj(data.events).total);
 			el.evTotal.textContent = String(total);
+			const rehydrated = num(obj(data.status).rehydrated);
+			if (el.evSource !== null && el.evSource !== void 0) el.evSource.textContent = rehydrated > 0 ? `· 含启动恢复 ${rehydrated} 条` : "· 审计日志同步";
 			const rows = (state.filter === "all" ? events : events.filter((event) => event.class === state.filter)).slice(-200).reverse();
 			if (rows.length === 0) {
 				el.evRows.innerHTML = "<div class=\"empty-c\">暂无事件<br>模型第一次进入决策点后开始记录</div>";
@@ -1345,6 +1376,22 @@ var HarnessMMClient = (function(exports) {
 			}
 		};
 	}
+	/**
+	* 宿主把面板塞进「对话的滚动容器」里。切到本页签时那个容器还保留着上一次的
+	* scrollTop（对话很长时它贴着底部），于是面板一打开就停在最下面 —— 用户看到
+	* 的是「一进来就显示区域的最底下」。
+	*
+	* 挂载后把可滚动祖先归零。只做一次，不监听滚动，免得和用户抢滚动条。
+	*/
+	function resetScroll(node) {
+		let element = node?.parentElement ?? null;
+		let depth = 0;
+		while (element !== null && element !== void 0 && depth < 16) {
+			if (element.scrollHeight > element.clientHeight + 4 && element.scrollTop > 0) element.scrollTop = 0;
+			element = element.parentElement;
+			depth += 1;
+		}
+	}
 	function mount(host) {
 		if (mounts.has(host)) return;
 		let panel = null;
@@ -1355,15 +1402,31 @@ var HarnessMMClient = (function(exports) {
 			host.textContent = `HarnessMM 面板挂载失败：${error && error.message ? error.message : String(error)}`;
 			return;
 		}
-		mounts.set(host, {
+		const entry = {
 			panel,
-			release: acquirePolling(panel)
-		});
+			release: acquirePolling(panel),
+			observer: null
+		};
+		mounts.set(host, entry);
+		resetScroll(host);
+		if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resetScroll(host));
+		setTimeout(() => resetScroll(host), 250);
+		if (typeof IntersectionObserver === "function") {
+			let wasVisible = false;
+			const observer = new IntersectionObserver((entries) => {
+				const visible = entries.some((item) => item.isIntersecting);
+				if (visible && !wasVisible) resetScroll(host);
+				wasVisible = visible;
+			});
+			observer.observe(host);
+			entry.observer = observer;
+		}
 	}
 	function unmount(host) {
 		const entry = mounts.get(host);
 		if (entry === void 0) return;
 		mounts.delete(host);
+		if (entry.observer !== null && entry.observer !== void 0) entry.observer.disconnect();
 		entry.release();
 		entry.panel.destroy();
 	}

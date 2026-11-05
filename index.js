@@ -24,6 +24,7 @@
  * slow actor already paid for it, and it keeps every request a pure function of
  * the durable session log.
  */
+import { existsSync, readFileSync } from 'node:fs';
 import { appendFile, rename, rm, stat } from 'node:fs/promises';
 import Schema from '@deepseek-ai/schemastery';
 import {
@@ -143,26 +144,31 @@ export function apply(ctx, config = {}) {
     sessionCounters.set(key, scoped);
   }
 
+  /** 事件 → 计数器。`record` 与「启动回放审计」共用同一套规则，避免两处漂移。 */
+  function applyEvent(event) {
+    if (event.kind === 'gdr/bank-authored') {
+      bump(event.session, event.admitted ? 'banksAuthored' : 'banksRejected');
+    }
+    if (event.kind === 'gdr/invalid-bank') bump(event.session, 'invalidBanks');
+    if (event.kind === 'gdr/defer') bump(event.session, 'deferrals');
+    // 有动作库在场，但这一轮一个候选都没通过准入（守卫/公钥字节/链深）。
+    // 这类决策点以前哪个计数器都不进，直接导致命中率虚高。
+    if (event.kind === 'gdr/pre-admission'
+      && Array.isArray(event.rejected) && event.rejected.length > 0
+      && (!Array.isArray(event.eligible) || event.eligible.length === 0)) {
+      bump(event.session, 'guardMisses');
+    }
+    if (event.kind === 'gdr/substitution-certificate') bump(event.session, 'certificates');
+    if (event.kind === 'gdr/uncertified-execution') bump(event.session, 'uncertified');
+  }
+
   const controller = new GuardedReuseController({
     policy,
     minimumChain: resolved.minimumChain,
     record: event => {
       admissions.push(event);
       if (admissions.length > 2000) admissions.splice(0, admissions.length - 2000);
-      if (event.kind === 'gdr/bank-authored') {
-        bump(event.session, event.admitted ? 'banksAuthored' : 'banksRejected');
-      }
-      if (event.kind === 'gdr/invalid-bank') bump(event.session, 'invalidBanks');
-      if (event.kind === 'gdr/defer') bump(event.session, 'deferrals');
-      // 有动作库在场，但这一轮一个候选都没通过准入（守卫/公钥字节/链深）。
-      // 这类决策点以前哪个计数器都不进，直接导致命中率虚高。
-      if (event.kind === 'gdr/pre-admission'
-        && Array.isArray(event.rejected) && event.rejected.length > 0
-        && (!Array.isArray(event.eligible) || event.eligible.length === 0)) {
-        bump(event.session, 'guardMisses');
-      }
-      if (event.kind === 'gdr/substitution-certificate') bump(event.session, 'certificates');
-      if (event.kind === 'gdr/uncertified-execution') bump(event.session, 'uncertified');
+      applyEvent(event);
       for (const listener of auditListeners) listener(event);
     },
   });
@@ -204,6 +210,40 @@ export function apply(ctx, config = {}) {
       return () => { auditListeners.delete(listener); };
     });
   }
+
+  /**
+   * 启动时从审计文件回放历史。
+   *
+   * 计数器和事件列表都在进程内存里，重启就归零 —— 但审计文件是持久的。
+   * 不回放的话，面板每次重启都显示「0 条」，用户看到的就是「数据全丢了」，
+   * 而磁盘上明明还在。这里把最近 2000 条重新喂回同一套计数规则。
+   *
+   * 两个要点：
+   *   1. 回放**不写回**审计文件（不走 `record`），否则每重启一次历史就翻一倍。
+   *   2. 动作库的候选内容不在审计里，所以 DAG 重建不出来 —— 面板会如实显示空图，
+   *      但事件、证书、趋势、计数、会话列表都能恢复。
+   */
+  const rehydrated = (() => {
+    const target = auditPath();
+    try {
+      if (!existsSync(target)) return 0;
+      const lines = readFileSync(target, 'utf8').split('\n').filter(line => line.trim() !== '');
+      let count = 0;
+      for (const line of lines.slice(-2000)) {
+        let event;
+        try { event = JSON.parse(line); } catch { continue; }
+        if (event === null || typeof event !== 'object' || typeof event.kind !== 'string') continue;
+        admissions.push(event);
+        applyEvent(event);
+        // 让这个会话重新出现在「已知会话」里，按会话看历史才有口径。
+        if (typeof event.session === 'string' && event.session !== '') controller.state(event.session);
+        count += 1;
+      }
+      return count;
+    } catch {
+      return 0;
+    }
+  })();
 
   /* ------------------------------------------------------- system prompt text */
 
@@ -354,6 +394,8 @@ export function apply(ctx, config = {}) {
     controller, counters, sessionCounters, policy, admissions, startedAt: started,
     minimumChain: resolved.minimumChain,
     config: resolved,
+    // 启动时从审计文件回放了多少条历史，面板上要如实标出来。
+    rehydrated,
   });
 
   return () => {

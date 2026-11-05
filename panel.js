@@ -153,6 +153,7 @@ export function installPanel(ctx, deps) {
             startedAt: deps.startedAt,
             auditPath,
             auditLines: countAuditLines(auditPath),
+            rehydrated: deps.rehydrated ?? 0,
             session,
           });
           sendJson(res, 200, snapshot);

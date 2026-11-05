@@ -298,7 +298,7 @@ const SKELETON = `
       </section>
 
       <section class="card" id="eventCard">
-        ${cardHead(ICONS.pulse, '决策复用事件', '<b id="evTotal">0</b> 条 · 审计日志同步', { label: 'admissions', title: 'admissions 环形缓冲（上限 2000 条，超出后丢弃最旧记录）。完整记录另见 harnessmm-audit.jsonl。' })}
+        ${cardHead(ICONS.pulse, '决策复用事件', '<b id="evTotal">0</b> 条 <span id="evSource">· 审计日志同步</span>', { label: 'admissions', title: 'admissions 环形缓冲（上限 2000 条，超出后丢弃最旧记录）。完整记录另见 harnessmm-audit.jsonl。' })}
         <div class="chips" id="evChips"></div>
         <div class="events" id="evRows"></div>
         <div class="evfoot" id="evFoot"></div>
@@ -411,6 +411,7 @@ export function createPanel(host, options = {}) {
     trendDots: byId('trendDots'),
     trendAxis: byId('trendAxis'),
     evTotal: byId('evTotal'),
+    evSource: byId('evSource'),
     evChips: byId('evChips'),
     evRows: byId('evRows'),
     evFoot: byId('evFoot'),
@@ -421,6 +422,38 @@ export function createPanel(host, options = {}) {
     metaAudit: byId('metaAudit'),
     provList: byId('provList'),
   };
+
+  /**
+   * 「内容没变就不写 DOM」。
+   *
+   * render() 每次都会把 13 个区块全部重建，而轮询是 2 秒一次、侧栏和对话页签各一份。
+   * 推理期间 `requests` 每走一步就 +1，指纹一变就整块重写 innerHTML —— 结果是面板
+   * 一直在闪、鼠标悬停被打断、事件列表的滚动位置也丢。
+   *
+   * 这里给每个区块节点套一层 innerHTML 代理：值完全相同就跳过，一个字节都不写。
+   * 值变了照旧覆盖，行为与原来一致。
+   */
+  function lazyHTML(node) {
+    if (node === null || node === undefined) return node;
+    let last;
+    let primed = false;
+    return new Proxy(node, {
+      set(target, prop, value) {
+        if (prop === 'innerHTML') {
+          if (primed && last === value) return true;
+          last = value;
+          primed = true;
+        }
+        target[prop] = value;
+        return true;
+      },
+    });
+  }
+
+  for (const key of Object.keys(el)) {
+    const node = el[key];
+    if (node !== null && typeof node === 'object' && 'innerHTML' in node) el[key] = lazyHTML(node);
+  }
 
   const state = { filter: 'all', open: new Set(), trend: null, signature: '', data: null };
 
@@ -884,6 +917,13 @@ export function createPanel(host, options = {}) {
     const events = asArray(obj(data.events).recent);
     const total = num(obj(data.events).total);
     el.evTotal.textContent = String(total);
+    // 重启后这些事件是从审计文件回放出来的，必须说清楚，不能让人以为还在内存里。
+    const rehydrated = num(obj(data.status).rehydrated);
+    if (el.evSource !== null && el.evSource !== undefined) {
+      el.evSource.textContent = rehydrated > 0
+        ? `· 含启动恢复 ${rehydrated} 条`
+        : '· 审计日志同步';
+    }
     const filtered = state.filter === 'all' ? events : events.filter((event) => event.class === state.filter);
     const rows = filtered.slice(-200).reverse();
     if (rows.length === 0) {

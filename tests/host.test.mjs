@@ -8,7 +8,7 @@
 // The engine itself is covered by harness_plugin_engine.test.mjs.
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -394,6 +394,45 @@ test('the audit trail appends one line per event instead of overwriting', async 
     assert.ok(kinds.includes('gdr/pre-admission'), kinds.join(','));
     // 每行都带时间戳，且顺序与事件顺序一致（追加，不是覆盖）
     for (const line of lines) assert.match(JSON.parse(line).at, /^\d{4}-\d{2}-\d{2}T/);
+    dispose();
+  } finally {
+    process.env.HARNESSMM_AUDIT = previous;
+  }
+});
+
+// 回归：重启后面板显示「全部为 0」，用户看到的是「数据全丢了」，
+// 而审计文件里明明还在。启动时必须把历史回放回计数器。
+test('启动时从审计文件回放历史，而不是显示全 0', async () => {
+  const file = path.join(auditDir, `replay-${process.pid}.jsonl`);
+  const previous = process.env.HARNESSMM_AUDIT;
+  process.env.HARNESSMM_AUDIT = file;
+  const at = '2026-11-05T00:00:00.000Z';
+  const history = [
+    { kind: 'gdr/bank-authored', session: 's-old', admitted: true, at },
+    { kind: 'gdr/pre-admission', session: 's-old', eligible: [], rejected: [{ id: 'A', reason: 'guard_false' }], at },
+    {
+      kind: 'gdr/substitution-certificate', session: 's-old', candidate_id: 'A',
+      exact_native_tool: 'read', exact_arguments: '{"file_path":"a.ts"}', call_id: 'gdr_old_A',
+      guard: { return_code: 0 }, guard_fields: ['return_code'],
+      native_receipt_sha256: 'f'.repeat(64), bank_sha256: 'e'.repeat(64),
+      steps_before: 0, steps_after: 1, valid_substitution: true, at,
+    },
+  ];
+  writeFileSync(file, `${history.map(event => JSON.stringify(event)).join('\n')}\n`);
+  try {
+    const host = makeHost();
+    const dispose = plugin.apply(host.ctx, {});
+    const status = await host.tools.get('harnessmm_status').execute({});
+
+    assert.equal(status.counters.banksAuthored, 1, '历史里的动作库要恢复');
+    assert.equal(status.counters.certificates, 1, '历史里的证书要恢复');
+    assert.equal(status.counters.guardMisses, 1, '历史里被守卫拦下的决策点要恢复');
+    assert.ok(status.sessions >= 1, '历史里的会话要重新出现在会话列表里');
+    assert.equal(status.certificates, 1);
+
+    // 回放不能写回文件，否则每重启一次历史就翻一倍。
+    const lines = readFileSync(file, 'utf8').trim().split('\n');
+    assert.equal(lines.length, 3, '回放不能产生新的审计行');
     dispose();
   } finally {
     process.env.HARNESSMM_AUDIT = previous;

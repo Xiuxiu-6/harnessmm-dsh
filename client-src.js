@@ -116,6 +116,25 @@ function acquirePolling(panel) {
   };
 }
 
+/**
+ * 宿主把面板塞进「对话的滚动容器」里。切到本页签时那个容器还保留着上一次的
+ * scrollTop（对话很长时它贴着底部），于是面板一打开就停在最下面 —— 用户看到
+ * 的是「一进来就显示区域的最底下」。
+ *
+ * 挂载后把可滚动祖先归零。只做一次，不监听滚动，免得和用户抢滚动条。
+ */
+function resetScroll(node) {
+  let element = node?.parentElement ?? null;
+  let depth = 0;
+  while (element !== null && element !== undefined && depth < 16) {
+    if (element.scrollHeight > element.clientHeight + 4 && element.scrollTop > 0) {
+      element.scrollTop = 0;
+    }
+    element = element.parentElement;
+    depth += 1;
+  }
+}
+
 function mount(host) {
   if (mounts.has(host)) return;
   let panel = null;
@@ -127,13 +146,33 @@ function mount(host) {
     host.textContent = `HarnessMM 面板挂载失败：${error && error.message ? error.message : String(error)}`;
     return;
   }
-  mounts.set(host, { panel, release: acquirePolling(panel) });
+  const entry = { panel, release: acquirePolling(panel), observer: null };
+  mounts.set(host, entry);
+
+  // 立刻归零一次；宿主可能在挂载后才把滚动容器摆到底部，所以再补两次。
+  resetScroll(host);
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => resetScroll(host));
+  setTimeout(() => resetScroll(host), 250);
+
+  // 宿主也可能不卸载组件、只切显示。那样 mount 不会再跑一次，
+  // 所以用「从不可见变为可见」这个边沿再归零一次。
+  if (typeof IntersectionObserver === 'function') {
+    let wasVisible = false;
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.some(item => item.isIntersecting);
+      if (visible && !wasVisible) resetScroll(host);
+      wasVisible = visible;
+    });
+    observer.observe(host);
+    entry.observer = observer;
+  }
 }
 
 function unmount(host) {
   const entry = mounts.get(host);
   if (entry === undefined) return;
   mounts.delete(host);
+  if (entry.observer !== null && entry.observer !== undefined) entry.observer.disconnect();
   entry.release();
   entry.panel.destroy();
 }

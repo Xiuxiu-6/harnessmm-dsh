@@ -393,6 +393,7 @@ export function buildSnapshot(input) {
   const {
     controller, counters, sessionCounters, policy, minimumChain, config,
     admissions, startedAt, auditPath, auditLines, now = Date.now(), session = null,
+    rehydrated = 0,
   } = input ?? {};
 
   /**
@@ -470,9 +471,11 @@ export function buildSnapshot(input) {
         path: auditPath ?? null,
         lines: auditLines ?? null,
         filtered: false,
+        // 启动时从审计文件回放了多少条历史。0 表示这一进程没有可恢复的旧账。
+        rehydrated: num(rehydrated),
         note: scoped
           ? 'JSONL 追加写，全局一个文件；这里显示的是全部会话的行数'
-          : 'JSONL 追加写；进程重启后仍可追溯',
+          : 'JSONL 追加写；进程重启后由启动回放恢复',
       },
     },
 
@@ -484,6 +487,7 @@ export function buildSnapshot(input) {
       sessions,
       pendingActions,
       counters: safeCounters,
+      rehydrated: num(rehydrated),
     },
 
     diagnostics: {
