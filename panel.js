@@ -11,7 +11,7 @@
  *   - webServer 用双键探测 + 延迟重试（headless profile 不挂载，不能阻塞启动）。
  *   - 所有路由经 authenticatedWebRoutes 包装。
  */
-import { readFileSync, existsSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
@@ -24,16 +24,46 @@ const WEB_SERVER_KEYS = ['webServer', 'httpServer'];
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PANEL_FILE = path.join(HERE, 'panel.html');
 
-/** 审计文件行数（best effort，失败返回 null）。 */
+/**
+ * 审计文件行数（best effort，失败返回 null）。
+ *
+ * 这个函数在 `/status` 里跑，而面板每 2 秒轮询一次（侧栏 + 对话页签各一个）。
+ * 原先每次全量 `readFileSync` 再逐字符数换行，文件一大就把宿主事件循环堵住。
+ * 现在只读「上次读到的位置之后」的新增字节，按 inode 识别轮转/替换。
+ */
+const auditCache = new Map(); // path -> { ino, offset, newlines, endsWithNewline }
+
 export function countAuditLines(auditPath) {
   try {
     if (!auditPath || !existsSync(auditPath)) return null;
-    const text = readFileSync(auditPath, 'utf8');
-    if (!text) return 0;
-    let n = 0;
-    for (let i = 0; i < text.length; i += 1) if (text.charCodeAt(i) === 10) n += 1;
-    if (text.charCodeAt(text.length - 1) !== 10) n += 1;
-    return n;
+    const info = statSync(auditPath, { bigint: true });
+    const ino = String(info.ino);
+    const size = Number(info.size);
+
+    let cache = auditCache.get(auditPath);
+    // 文件被轮转（换成 .1、新建同名文件）或被截断：从头重新数
+    if (!cache || cache.ino !== ino || size < cache.offset) {
+      cache = { ino, offset: 0, newlines: 0, endsWithNewline: true };
+    }
+    if (size > cache.offset) {
+      const length = size - cache.offset;
+      const buf = Buffer.allocUnsafe(length);
+      const fd = openSync(auditPath, 'r');
+      let read = 0;
+      try {
+        read = readSync(fd, buf, 0, length, cache.offset);
+      } finally {
+        closeSync(fd);
+      }
+      let added = 0;
+      for (let i = 0; i < read; i += 1) if (buf[i] === 10) added += 1;
+      cache.newlines += added;
+      cache.endsWithNewline = read > 0 && buf[read - 1] === 10;
+      cache.offset += read;
+    }
+    auditCache.set(auditPath, cache);
+    // 末尾没有换行的半行也算一行（与旧实现一致），下次补齐时不会重复计。
+    return cache.newlines + (cache.endsWithNewline ? 0 : 1);
   } catch {
     return null;
   }
@@ -178,8 +208,13 @@ export function installPanel(ctx, deps) {
   };
 }
 
-/** 审计文件默认位置，与 index.js 的 auditPath() 保持一致。 */
+/**
+ * 审计文件位置，必须与 index.js 的 auditPath() 算出同一个文件
+ * （含 HARNESSMM_AUDIT 覆盖），否则面板数的是一份、实际写的是另一份。
+ */
 function auditPathOf() {
+  const override = process.env.HARNESSMM_AUDIT;
+  if (override) return override;
   const home = process.env.DSH_HOME || process.env.USERPROFILE || process.env.HOME || process.cwd();
-  return `${home}/harnessmm-audit.jsonl`.replace(/\\/g, '/');
+  return `${home}/harnessmm-audit.jsonl`;
 }

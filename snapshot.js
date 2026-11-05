@@ -289,10 +289,18 @@ export function derivePhase(counters) {
   return 'A';
 }
 
-/** 守卫命中率 = 替换次数 / (替换次数 + 被拒次数)。无数据时为 null。 */
+/**
+ * 守卫命中率 = 替换次数 / 所有「动作库在场」的决策点。
+ *
+ * 分母必须同时包含三种落空方式，缺一个都会把成功率算高：
+ *   deferrals    —— 候选多于一个，交给慢速模型裁决
+ *   uncertified  —— 替换后原生调用偏离，证书被拒
+ *   guardMisses  —— 一个候选都没通过准入（守卫/字节上限/链深）
+ * 三者都是「有动作库、但这次没用上」，与 substitutions 互斥且穷尽。
+ */
 export function guardHitRate(counters) {
   const subs = num(counters?.substitutions);
-  const rejected = num(counters?.deferrals) + num(counters?.uncertified);
+  const rejected = num(counters?.deferrals) + num(counters?.uncertified) + num(counters?.guardMisses);
   const denom = subs + rejected;
   if (denom === 0) return null;
   return Math.round((subs / denom) * 1000) / 10;
@@ -406,7 +414,9 @@ export function buildSnapshot(input) {
   const rejection = rejectionBreakdown(list);
   const phase = derivePhase(safeCounters);
 
-  const sessions = knownSessions.length;
+  // 会话视图里这个数字必须跟着口径走：否则面板换个标题、数字还是全局的，
+  // 正是这一版要消掉的误导。
+  const sessions = scoped ? (known ? 1 : 0) : knownSessions.length;
   const pendingActions = controller?.sessions instanceof Map
     ? scoped
       ? (controller.sessions.get(session)?.pending instanceof Map ? controller.sessions.get(session).pending.size : 0)

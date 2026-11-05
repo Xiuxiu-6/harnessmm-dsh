@@ -984,8 +984,26 @@ export function createPanel(host, options = {}) {
 }
 
 /**
+ * 快照指纹：用来判断「这份快照值得重绘吗」。
+ *
+ * 不能直接比响应原文 —— `generatedAt` 每次都是新的毫秒时间戳，
+ * `status.uptimeSeconds` 每轮询一次就 +2，文本永远不同，于是每 2 秒全量重绘一次
+ * （整个事件表 + DAG canvas 重建），既费 CPU 又会打断鼠标悬停。
+ *
+ * 所以指纹里剔掉 `generatedAt`，并把 `uptimeSeconds` 按分钟取整：
+ * 运行时长仍然会更新，但最多一分钟一次。
+ */
+export function signatureOf(snapshot) {
+  if (snapshot === null || typeof snapshot !== 'object') return String(snapshot);
+  const { generatedAt, ...rest } = snapshot;
+  const status = rest.status ?? {};
+  const uptime = Math.floor((Number(status.uptimeSeconds) || 0) / 60);
+  return JSON.stringify({ ...rest, status: { ...status, uptimeSeconds: uptime } });
+}
+
+/**
  * 轮询 /plugins/harnessmm/status，把每份新快照交给面板。
- * 同一份快照（文本完全一致）不会触发重绘，避免打断展开/悬停状态。
+ * 指纹没变就不重绘（见 signatureOf），避免无谓的整块重建。
  *
  * `options.sessionId` 存在时只取那一个对话的账；不存在时是全局视图。
  */
@@ -1008,9 +1026,11 @@ export function pollStatus(panel, options = {}) {
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const text = await response.text();
       if (stopped) return;
-      if (text !== signature) {
-        signature = text;
-        panel.render(JSON.parse(text));
+      const data = JSON.parse(text);
+      const next = signatureOf(data);
+      if (next !== signature) {
+        signature = next;
+        panel.render(data);
       }
     } catch (error) {
       if (stopped) return;

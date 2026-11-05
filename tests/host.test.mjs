@@ -1,4 +1,4 @@
-﻿// Integration test for the Host wiring of the HarnessMM plugin.
+// Integration test for the Host wiring of the HarnessMM plugin.
 //
 // `cordis` is not a workspace dependency, so this file drives the plugin with a
 // minimal Context that implements exactly the contract the plugin uses:
@@ -7,9 +7,28 @@
 //   - a waterfall dispatcher for `llm/stream` and `tools/post-execute`
 // The engine itself is covered by harness_plugin_engine.test.mjs.
 import assert from 'node:assert/strict';
-import test from 'node:test';
+import test, { after } from 'node:test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import * as plugin from '../index.js';
+
+// 审计是往 home 下写的。测试必须把它指到临时目录，否则 `npm test` 会污染用户目录。
+const auditDir = mkdtempSync(path.join(tmpdir(), 'hmm-audit-'));
+process.env.HARNESSMM_AUDIT = path.join(auditDir, 'default.jsonl');
+after(() => rmSync(auditDir, { recursive: true, force: true }));
+
+/** 轮询等待异步 append 落盘。 */
+async function waitFor(predicate, timeoutMs = 2000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = predicate();
+    if (value) return value;
+    if (Date.now() > deadline) return null;
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+}
 
 const PLAN = candidates => `<CHISEL_PLAN>${JSON.stringify({ candidates })}</CHISEL_PLAN>`;
 
@@ -291,4 +310,51 @@ test('an ordinary tool result is not certified', async () => {
   assert.equal(reached, true);
   const status = await host.tools.get('harnessmm_status').execute({});
   assert.equal(status.counters.certificates, 0);
+});
+
+// 回归：审计曾经是「整文件覆盖」而不是追加。
+// dsh-fs-local 的 writeText(target, content, expected) 第三个参数是版本令牌，
+// 传 {mode:'append'} 不匹配任何分支，最终走 writeFileAtomic 把文件整体替换掉，
+// 于是审计文件里永远只剩最后一条事件。现在改用 node:fs 的 appendFile。
+test('the audit trail appends one line per event instead of overwriting', async () => {
+  const file = path.join(auditDir, `append-${process.pid}.jsonl`);
+  const previous = process.env.HARNESSMM_AUDIT;
+  process.env.HARNESSMM_AUDIT = file;
+  try {
+    const host = makeHost();
+    const dispose = plugin.apply(host.ctx, { minimumChain: 1 });
+    const messages = [{ role: 'user', content: [{ type: 'text', text: 'go' }] }];
+
+    // 第一步：慢回答里带动作库 —— 产生 gdr/bank-authored
+    const stepOne = await driveStream(host, {
+      purpose: 'conversation', sessionId: 'audit-1', messages, tools: [readTool],
+    }, async function* () {
+      yield { type: 'block-end', index: 0, block: { type: 'text', text: PLAN([node('A', 'root', { file_path: 'a.ts' })]) } };
+      yield { type: 'block-end', index: 1, block: { type: 'tool-call', id: 'root', name: 'read', arguments: '{}' } };
+      yield { type: 'finish', reason: { kind: 'tool-calls' } };
+    });
+    messages.push(
+      { role: 'assistant', content: stepOne.filter(chunk => chunk.type === 'block-end').map(chunk => chunk.block) },
+      { role: 'tool', toolCallId: 'root', content: [{ type: 'text', text: '{"return_code":0,"stdout":"ok","stderr":null}' }] },
+    );
+
+    // 第二步：边界上产生 pre-admission + compiled-native-action
+    await driveStream(host, { purpose: 'conversation', sessionId: 'audit-1', messages, tools: [readTool] },
+      async function* () { yield { type: 'finish', reason: { kind: 'stop' } }; });
+
+    const lines = await waitFor(() => {
+      if (!readFileSync(file, 'utf8').includes('gdr/compiled-native-action')) return null;
+      return readFileSync(file, 'utf8').trim().split('\n');
+    });
+    assert.ok(lines, '审计文件里没有等到 compiled-native-action');
+    assert.ok(lines.length >= 3, `审计应该逐条追加，实际只有 ${lines.length} 行`);
+    const kinds = lines.map(line => JSON.parse(line).kind);
+    assert.ok(kinds.includes('gdr/bank-authored'), kinds.join(','));
+    assert.ok(kinds.includes('gdr/pre-admission'), kinds.join(','));
+    // 每行都带时间戳，且顺序与事件顺序一致（追加，不是覆盖）
+    for (const line of lines) assert.match(JSON.parse(line).at, /^\d{4}-\d{2}-\d{2}T/);
+    dispose();
+  } finally {
+    process.env.HARNESSMM_AUDIT = previous;
+  }
 });

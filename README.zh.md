@@ -57,7 +57,7 @@
 | **替换证书** | `admissions` 中 `gdr/substitution-certificate` | `snapshot.js:collectCertificates` | 缓冲 2000 条 |
 | **趋势曲线** | `certificates[].steps_after`（真实步号） | `snapshot.js:trendSeries` | 同上 |
 | **事件流** | `admissions` 全量 | `snapshot.js:eventClassCounts` | 缓冲 2000 条 |
-| **审计行数** | `$DSH_HOME/harnessmm-audit.jsonl` 行数 | `panel.js:countAuditLines` | 磁盘持久 |
+| **审计行数** | `$DSH_HOME/harnessmm-audit.jsonl` 行数 | `panel.js:countAuditLines`（增量读，只读新增字节） | 磁盘持久，超过 8 MiB 轮转为 `.1` |
 | **统计口径** | 快照里的 `scope` / `session` / `knownSessions` | `snapshot.js:buildSnapshot` | 每次请求现算 |
 
 > **口径（1.2.0 起）**：上表除「审计行数」外，都可以按会话过滤。
@@ -114,24 +114,35 @@ npm i harnessmm-dsh
 
 ### 4.2 手动复制（仅开发用）
 
-把本目录下这些文件复制到
+把本目录下这些文件**整份覆盖**到
 `~/.dsh/profiles/<你的 profile>/node_modules/harnessmm-dsh/`：
 
 ```
-panel.js          新增
-snapshot.js       新增
-web-routes.js     新增
-panel.html        新增
-client.js         新增（已构建好，由 build-client.mjs 生成）
-index.js          替换（按 INDEX-PATCH.md 改 2 行）
-package.json      替换（加了 dsh.client 与 exports）
+index.js  engine.js  panel.js  snapshot.js  web-routes.js
+panel.html  client.js  package.json  cordis.patch.yml
 ```
 
-> `engine.js`、`cordis.patch.yml`、`locale/`、`icon.svg` **保持原样不动**。
+`client.js` 是构建产物（`npm run build:client` 生成），不要手改。
 
-### 4.3 改 index.js
+> ⚠️ `cordis.patch.yml` **必须一起复制**。里面 `insert[].name` 必须等于
+> `package.json` 的 `name`（当前是 `harnessmm-dsh`）。名字对不上时加载器
+> `import(name)` 直接失败，插件**静默不激活**——面板只会显示「读取失败」，
+> 不报错、不提示，很难查。
 
-见 [INDEX-PATCH.md](./INDEX-PATCH.md)，只需加 2 行。
+### 4.3 确认它真的加载了
+
+重启后先看路由有没有注册（`<端口>` 换成实际端口）：
+
+```
+curl -i http://127.0.0.1:<端口>/plugins/harnessmm/health
+```
+
+| 返回 | 含义 |
+| --- | --- |
+| `401 {"error":"unauthorized"}` | 路由已注册，插件加载成功（401 是认证层在拦，正常） |
+| `404` 且 body 为空 | 路由不存在，插件没加载——先核对 `cordis.patch.yml` 的 `name` |
+
+面板本身也有一张降级卡片：读不到 `/status` 时会写「宿主插件可能未启动或路由未注册」。
 
 ### 4.4 重启
 

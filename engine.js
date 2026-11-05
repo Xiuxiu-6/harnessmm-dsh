@@ -337,22 +337,6 @@ export class GuardedReuseController {
     return state;
   }
 
-  /** Called with the frozen Host request; returns the bank-visible options. */
-  inspect({ sessionId, messages, tools }) {
-    this.state(sessionId);
-    if (!this.policy.enabled) return null;
-    if (!Array.isArray(messages) || !messages.length) return null;
-    if (!Array.isArray(tools) || !tools.length
-      || new Set(tools.map(tool => tool.name)).size !== tools.length) return null;
-    try {
-      return decisionState(messages, this.policy, tools);
-    } catch (error) {
-      if (!(error instanceof BankContractError)) throw error;
-      this.record({ kind: 'gdr/invalid-bank', session: String(sessionId ?? ''), error: error.message });
-      return { invalid: true };
-    }
-  }
-
   /**
    * Rewrite the previous assistant message so the bank reaches the model as
    * ordinary visible text. The Host request is deep-frozen, so this returns a
@@ -465,6 +449,9 @@ export class GuardedReuseController {
       if (owner.key !== key) {
         this.record({
           kind: 'gdr/session-identity-mismatch', call_id: id,
+          // 这条事件原先没有 `session` 字段，按会话过滤时永远查不到它。
+          // 归属写作者会话：证书最终记在它名下（见 resolution）。
+          session: owner.key,
           request_session: owner.key, dispatch_session: key,
           resolution: 'certified against the session that authored the pending action',
         });
@@ -503,19 +490,6 @@ export class GuardedReuseController {
   /** Drop session state (agent disposal, session end, or plugin unload). */
   forget(sessionId) {
     this.sessions.delete(String(sessionId ?? 'global'));
-  }
-
-  /** Aggregate counters for the status tool and the status line. */
-  summary() {
-    let banks = 0;
-    let certificates = 0;
-    let pending = 0;
-    for (const state of this.sessions.values()) {
-      banks += state.banks.size;
-      pending += state.pending.size;
-    }
-    for (const entry of this.history ?? []) if (entry.kind === 'gdr/substitution-certificate') certificates += 1;
-    return { sessions: this.sessions.size, banks, certificates, pending };
   }
 }
 

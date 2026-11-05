@@ -24,6 +24,7 @@
  * slow actor already paid for it, and it keeps every request a pure function of
  * the durable session log.
  */
+import { appendFile, rename, rm, stat } from 'node:fs/promises';
 import Schema from '@deepseek-ai/schemastery';
 import {
   GuardedReuseController, planInstruction,
@@ -94,11 +95,14 @@ function sessionKey(options) {
   return String(options?.sessionId ?? 'unscoped');
 }
 
-/** 八个计数器的零值。全局一份，每个会话再各一份。 */
+/** 九个计数器的零值。全局一份，每个会话再各一份。 */
 function zeroCounters() {
   return {
     requests: 0, substitutions: 0, certificates: 0, uncertified: 0,
     banksAuthored: 0, banksRejected: 0, deferrals: 0, invalidBanks: 0,
+    // 「有动作库在场、但没有任何候选通过准入」的决策点。命中率的分母必须包含它，
+    // 否则守卫把 9 次全拦下来、只放过 1 次，面板照样能显示 100%。
+    guardMisses: 0,
   };
 }
 
@@ -150,6 +154,13 @@ export function apply(ctx, config = {}) {
       }
       if (event.kind === 'gdr/invalid-bank') bump(event.session, 'invalidBanks');
       if (event.kind === 'gdr/defer') bump(event.session, 'deferrals');
+      // 有动作库在场，但这一轮一个候选都没通过准入（守卫/公钥字节/链深）。
+      // 这类决策点以前哪个计数器都不进，直接导致命中率虚高。
+      if (event.kind === 'gdr/pre-admission'
+        && Array.isArray(event.rejected) && event.rejected.length > 0
+        && (!Array.isArray(event.eligible) || event.eligible.length === 0)) {
+        bump(event.session, 'guardMisses');
+      }
       if (event.kind === 'gdr/substitution-certificate') bump(event.session, 'certificates');
       if (event.kind === 'gdr/uncertified-execution') bump(event.session, 'uncertified');
       for (const listener of auditListeners) listener(event);
@@ -158,19 +169,41 @@ export function apply(ctx, config = {}) {
 
   /* ------------------------------------------------------------------ audit */
 
-  ctx.inject(['fs'], fsCtx => {
-    if (!resolved.auditLog) return () => {};
-    const path = auditPath();
-    const handle = fsCtx.fs.resolve(path);
-    return fsCtx.effect(() => {
+  // 审计必须是「追加」。`dsh-fs-local` 的 writeText(target, content, expected, signal)
+  // 第三个参数是版本令牌（replaceIfVersion / createIfAbsent），**没有任何 append 能力**：
+  // 传 `{mode:'append'}` 两个分支都不匹配，最终走 writeFileAtomic —— 新建临时文件写全量
+  // 内容再 rename，等于整文件覆盖，文件里永远只剩最后一条事件。
+  // 所以这里直接用 node:fs 的 appendFile（内核 O_APPEND），并给文件加一个大小上限。
+  const AUDIT_MAX_BYTES = 8 * 1024 * 1024;
+
+  /** 超过上限就把当前文件换名成 `.1`（覆盖旧的 `.1`），避免无界增长。 */
+  const rotateAudit = async (target) => {
+    try {
+      const info = await stat(target);
+      if (info.size <= AUDIT_MAX_BYTES) return;
+      await rm(`${target}.1`, { force: true });
+      await rename(target, `${target}.1`);
+    } catch { /* 轮转失败不影响继续追加 */ }
+  };
+
+  if (resolved.auditLog) {
+    const auditTarget = auditPath();
+    let appended = 0;
+    ctx.effect(() => {
       const listener = event => {
-        handle.then(target => fsCtx.fs.writeText(target, `${JSON.stringify({ at: new Date().toISOString(), ...event })}\n`, { mode: 'append' }))
+        const line = `${JSON.stringify({ at: new Date().toISOString(), ...event })}\n`;
+        appendFile(auditTarget, line, 'utf8')
+          .then(() => {
+            appended += 1;
+            // 每 500 条查一次大小：stat 不贵，但没必要每条都做。
+            if (appended % 500 === 0) rotateAudit(auditTarget);
+          })
           .catch(() => { /* audit is best effort; it never affects a request or a tool call */ });
       };
       auditListeners.add(listener);
       return () => { auditListeners.delete(listener); };
     });
-  });
+  }
 
   /* ------------------------------------------------------- system prompt text */
 
@@ -329,8 +362,15 @@ export function apply(ctx, config = {}) {
   };
 }
 
-/** Audit trail location, kept outside the workspace so it never dirties a repo. */
+/**
+ * Audit trail location, kept outside the workspace so it never dirties a repo.
+ *
+ * `HARNESSMM_AUDIT` 可以整体覆盖这个路径 —— 测试用它写临时目录，
+ * 不想让审计落在 home 下的用户也可以指到别处。面板读的是同一个函数（见 panel.js）。
+ */
 function auditPath() {
+  const override = process.env.HARNESSMM_AUDIT;
+  if (override) return override;
   const home = process.env.DSH_HOME || process.env.USERPROFILE || process.env.HOME || process.cwd();
   return `${home}/harnessmm-audit.jsonl`;
 }

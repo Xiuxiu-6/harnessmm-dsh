@@ -1,6 +1,6 @@
 {
   "name": "harnessmm-dsh",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Guarded decision reuse for the DeepSeek Harness: the model authors already-decided tool actions once, and receipt-supported ones execute through the native tools without another reasoning request. Ships a read-only decision-reuse panel with per-number data provenance.",
   "type": "module",
   "main": "index.js",
@@ -32,7 +32,9 @@
   ],
   "scripts": {
     "check": "node --check index.js && node --check engine.js && node --check panel.js && node --check snapshot.js && node --check web-routes.js && node --check client.js",
+    "pretest": "node scripts/vendor-harness-peer.mjs --if-missing || node -e \"console.log('[pretest] 缺少 .vendor-tools 里的 schemastery，host 测试会跳过；用 --asar 指定 app.asar 后重试')\"",
     "test": "node --import ./tests/register-vendor.mjs --test tests/*.test.mjs",
+    "build:client": "node build-client.mjs",
     "release": "node release.mjs"
   },
   "dsh": {

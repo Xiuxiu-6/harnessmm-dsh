@@ -200,7 +200,7 @@ Set these under the `harnessmm-guarded-reuse` row in your profile's `cordis.patc
 | `maximumCandidates` | integer 1–16 | `16` | Largest bank the model may author (A–P). |
 | `maximumFastSteps` | integer 1–16 | `8` | Consecutive substitutions before control returns to the model. |
 | `injectPlanInstruction` | boolean | `true` | Add the authorship instruction to the system prompt. |
-| `auditLog` | boolean | `true` | Append a JSONL audit trail to `$DSH_HOME/harnessmm-audit.jsonl`. |
+| `auditLog` | boolean | `true` | Append a JSONL audit trail to `$DSH_HOME/harnessmm-audit.jsonl` — one line per event, rotated to `.1` past 8 MiB. Set `HARNESSMM_AUDIT` to override the path. |
 
 ## Checking that it works
 
