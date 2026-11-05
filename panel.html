@@ -468,7 +468,7 @@ const PHASE = {
   A: {
     name: '未激活',
     title: '未激活',
-    sub: '插件已启用，但本次会话尚未产出合格动作库。这不是故障。',
+    sub: '插件已启用，但还没有产出合格动作库。这不是故障。',
     btn: '什么样的任务会触发？',
     target: 'about',
   },
@@ -642,7 +642,7 @@ const SKELETON = `
     <div class="col-main">
 
       <section class="card" id="statCard">
-        ${cardHead(ICONS.chart, '决策复用统计', '本会话', { label: 'index.js:counters', title: '进程内存计数器（counters）。随 DSH 进程重启归零；守卫命中率由 substitutions / (substitutions + deferrals + uncertified) 计算。' })}
+        ${cardHead(ICONS.chart, '决策复用统计', '全部会话', { label: 'index.js:counters', title: '进程内存计数器（counters），统计进程内所有对话。这是独立页面，不跟随某个对话；要看单个对话请用 DSH 里的面板。随 DSH 进程重启归零；守卫命中率由 substitutions / (substitutions + deferrals + uncertified) 计算。' })}
         <div class="pills">
           <div class="pill dim" id="p1"><div class="pv" id="v1">0</div><div class="pl">跳过推理</div></div>
           <div class="pill dim" id="p2"><div class="pv" id="v2">0</div><div class="pl">签发证书</div></div>
@@ -960,7 +960,7 @@ function createPanel(host, options = {}) {
     const last = obj(data.diagnostics).lastGuardFailure;
     const parts = [];
     if (phase === 'C') {
-      parts.push(`本次会话已跳过 ${num(counters.substitutions)} 次推理请求`);
+      parts.push(`全部会话累计已跳过 ${num(counters.substitutions)} 次推理请求`);
       parts.push(`守卫命中率 ${rate === null || rate === undefined ? '—' : `${rate}%`}`);
       const ago = agoOf(certs.length > 0 ? certs[certs.length - 1].at : null, Date.now());
       if (ago !== null) parts.push(`最近一次 ${ago}`);
@@ -975,7 +975,7 @@ function createPanel(host, options = {}) {
         parts.push('尚未出现守卫求值');
       }
     } else {
-      parts.push(`本次会话已记录 ${num(counters.requests)} 次推理请求`);
+      parts.push(`全部会话累计已记录 ${num(counters.requests)} 次推理请求`);
       parts.push('0 个合格动作库');
       parts.push('这不是故障：探索性任务本来就不该被复用');
     }

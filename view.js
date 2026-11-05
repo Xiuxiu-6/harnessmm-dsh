@@ -180,6 +180,18 @@ const ICONS = {
   bulb: '<path d="M9 18h6"/><path d="M10 22h4"/><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"/>',
 };
 
+/* 口径切换按钮的样式。单独放这里，避免动面板主样式表。 */
+const SCOPE_CSS = `
+.sb-scope{
+  font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:999px;
+  border:1px solid var(--border);background:var(--pill);color:var(--muted);
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.sb-scope:hover{background:var(--hover);color:var(--text)}
+.sb-scope[data-scope="session"]{background:var(--card);color:var(--text);border-color:var(--emerald)}
+.sb-scope[data-scope="session"]::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--emerald);margin-right:6px;vertical-align:1px}
+`;
+
 const SKELETON = `
 <div class="hmm-root">
   <div class="switcher" id="phasebar"></div>
@@ -188,6 +200,7 @@ const SKELETON = `
     <span class="sb-dot"></span>
     <span class="sb-title" id="sbTitle">—</span>
     <span class="sb-sub" id="sbSub">正在读取插件状态…</span>
+    <button class="sb-scope" id="sbScope" type="button" title="切换统计口径：本会话 / 全部会话">本会话</button>
     <button class="sb-btn" id="sbBtn" type="button">—</button>
   </div>
 
@@ -195,7 +208,7 @@ const SKELETON = `
     <div class="col-main">
 
       <section class="card" id="statCard">
-        ${cardHead(ICONS.chart, '决策复用统计', '本会话', { label: 'index.js:counters', title: '进程内存计数器（counters）。随 DSH 进程重启归零；守卫命中率由 substitutions / (substitutions + deferrals + uncertified) 计算。' })}
+        ${cardHead(ICONS.chart, '决策复用统计', '<span id="statMeta">本会话</span>', { label: 'index.js:counters', title: '本会话计数来自 index.js:sessionCounters，切到「全部会话」时改用 index.js:counters。随 DSH 进程重启归零；守卫命中率由 substitutions / (substitutions + deferrals + uncertified) 计算。' })}
         <div class="pills">
           <div class="pill dim" id="p1"><div class="pv" id="v1">0</div><div class="pl">跳过推理</div></div>
           <div class="pill dim" id="p2"><div class="pv" id="v2">0</div><div class="pl">签发证书</div></div>
@@ -360,7 +373,7 @@ export function createPanel(host, options = {}) {
   // 已经有了就直接复用，否则会抛 "Shadow root cannot be created on a host
   // which already hosts a shadow tree"，面板会白掉。
   const root = shadow ? (host.shadowRoot ?? host.attachShadow({ mode: 'open' })) : host;
-  root.innerHTML = `${shadow ? `<style>${PANEL_CSS}</style>` : ''}${SKELETON}`;
+  root.innerHTML = `${shadow ? `<style>${PANEL_CSS}${SCOPE_CSS}</style>` : ''}${SKELETON}`;
 
   const scope = root.querySelector('.hmm-root');
   const byId = (id) => (root.getElementById ? root.getElementById(id) : root.querySelector(`#${id}`));
@@ -369,6 +382,8 @@ export function createPanel(host, options = {}) {
     statusbar: byId('statusbar'),
     sbTitle: byId('sbTitle'),
     sbSub: byId('sbSub'),
+    sbScope: byId('sbScope'),
+    statMeta: byId('statMeta'),
     sbBtn: byId('sbBtn'),
     toolTotal: byId('toolTotal'),
     toolLegend: byId('toolLegend'),
@@ -453,6 +468,12 @@ export function createPanel(host, options = {}) {
     }
   });
 
+  el.sbScope.addEventListener('click', () => {
+    // 当前是本会话就切到全部，反之亦然。真正的取数在 client.js 里做。
+    const next = state.data?.scope === 'session' ? 'all' : 'session';
+    if (typeof options.onScopeChange === 'function') options.onScopeChange(next);
+  });
+
   el.sbBtn.addEventListener('click', () => {
     const phase = PHASE[state.data?.phase] ?? PHASE.A;
     const target = byId(phase.target);
@@ -506,14 +527,27 @@ export function createPanel(host, options = {}) {
       el.sbSub.textContent = `无法读取 /plugins/harnessmm/status：${data.offline}（宿主插件可能未启动或路由未注册）`;
     }
 
+    // 统计口径。按钮和卡片副标题必须同时说清是哪一个 —— 不能一边写「本会话」
+    // 一边报全局数字，那正是这一版要修掉的毛病。
+    const scoped = data.scope === 'session';
+    const short = obj(data.session).short;
+    const scopeLabel = scoped ? (short === undefined || short === null ? '本会话' : `本会话 · ${short}`) : '全部会话';
+    el.sbScope.textContent = scopeLabel;
+    el.sbScope.dataset.scope = scoped ? 'session' : 'all';
+    el.sbScope.title = scoped
+      ? '只统计当前这个对话；点击切换为全部会话'
+      : '统计全部对话；点击切换回本会话';
+    el.statMeta.textContent = scopeLabel;
+
     const counters = obj(obj(data.status).counters);
     const banks = asArray(data.banks);
     const certs = asArray(data.certificates);
     const rate = obj(data.diagnostics).guardHitRate;
     const last = obj(data.diagnostics).lastGuardFailure;
     const parts = [];
+    const subject = scoped ? '本次会话' : '全部会话累计';
     if (phase === 'C') {
-      parts.push(`本次会话已跳过 ${num(counters.substitutions)} 次推理请求`);
+      parts.push(`${subject}已跳过 ${num(counters.substitutions)} 次推理请求`);
       parts.push(`守卫命中率 ${rate === null || rate === undefined ? '—' : `${rate}%`}`);
       const ago = agoOf(certs.length > 0 ? certs[certs.length - 1].at : null, Date.now());
       if (ago !== null) parts.push(`最近一次 ${ago}`);
@@ -528,11 +562,21 @@ export function createPanel(host, options = {}) {
         parts.push('尚未出现守卫求值');
       }
     } else {
-      parts.push(`本次会话已记录 ${num(counters.requests)} 次推理请求`);
+      parts.push(`${subject}已记录 ${num(counters.requests)} 次推理请求`);
       parts.push('0 个合格动作库');
       parts.push('这不是故障：探索性任务本来就不该被复用');
     }
     if (data.offline === undefined) el.sbSub.textContent = parts.join(' · ');
+
+    if (data.offline === undefined && data.loading === true) {
+      el.sbSub.textContent = scoped ? '正在读取本会话…' : '正在读取全部会话…';
+    }
+
+    // 会话 id 对不上时宁可直说，也不要让人以为「这个对话什么都没发生」。
+    if (data.offline === undefined && scoped && obj(data.session).known === false) {
+      el.statusbar.dataset.s = 'A';
+      el.sbSub.textContent = `本会话还没有被插件记录（宿主会话 ${short ?? '未知'}）。新建对话、还没发过消息时就是这种状态。`;
+    }
 
     el.phasebar.innerHTML = '<span>当前状态：</span>' + ['A', 'B', 'C'].map((key) => {
       const active = key === phase;
@@ -942,9 +986,13 @@ export function createPanel(host, options = {}) {
 /**
  * 轮询 /plugins/harnessmm/status，把每份新快照交给面板。
  * 同一份快照（文本完全一致）不会触发重绘，避免打断展开/悬停状态。
+ *
+ * `options.sessionId` 存在时只取那一个对话的账；不存在时是全局视图。
  */
 export function pollStatus(panel, options = {}) {
-  const url = options.url ?? '/plugins/harnessmm/status';
+  const base = options.url ?? '/plugins/harnessmm/status';
+  const sessionId = typeof options.sessionId === 'string' && options.sessionId !== '' ? options.sessionId : null;
+  const url = sessionId === null ? base : `${base}?session=${encodeURIComponent(sessionId)}`;
   const interval = options.interval ?? 2000;
   let signature = '';
   let stopped = false;
@@ -997,6 +1045,30 @@ function offline(reason) {
     trend: { steps: [], cumulative: [], delta: [] },
     events: { total: 0, counts: {}, recent: [] },
   };
+}
+
+/**
+ * 切换会话时的占位快照：结构齐全、数字清零，只说明「正在读取」。
+ *
+ * 用它先把上一个对话的数字擦掉，否则切过去会看到别人的账 —— 那正是这一版
+ * 要修的问题。复用 offline() 的骨架，保证任何渲染分支都不会读到 undefined。
+ */
+export function blankSnapshot(sessionId = null) {
+  const base = offline('正在读取…');
+  delete base.offline;
+  base.schema = 'harnessmm-panel/blank';
+  base.loading = true;
+  base.scope = sessionId === null ? 'all' : 'session';
+  base.session = sessionId === null
+    ? null
+    : { id: sessionId, short: String(sessionId).slice(0, 8), known: true };
+  base.knownSessions = [];
+  // 计数器给全零，而不是空对象：面板上必须看到 0，不能看到「—」或旧数字。
+  base.status.counters = {
+    requests: 0, substitutions: 0, certificates: 0, uncertified: 0,
+    banksAuthored: 0, banksRejected: 0, deferrals: 0, invalidBanks: 0,
+  };
+  return base;
 }
 
 export { PANEL_CSS };

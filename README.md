@@ -64,6 +64,28 @@ to configure — restart the harness and it is there.
    in any browser tab. Useful when you want the panel full-width, or when the sidebar is
    not available.
 
+**It follows the conversation.** The panel counts only the conversation you have open:
+
+- Open conversation A → you see A's skipped requests, certificates and action banks.
+- Switch to B → the numbers switch to B's immediately; A's numbers never linger.
+- Start a new conversation → everything is 0, with an explicit "this conversation has not
+  been recorded yet" note.
+
+The chip in the top-right corner toggles the scope:
+
+```
+[ This conversation · 3f2a1b8c ]   default — one conversation only
+[ All conversations ]             click to see the process-wide total
+```
+
+The choice is remembered (`localStorage: harnessmm.scope`), and the sidebar tab behaves
+exactly like the conversation-header tab. The session id comes from the host's
+`uiSession.current`, which is the same UUID the engine records as `sessionId`.
+
+> 1.1.x counted process-wide but labelled the numbers "this conversation" — the wording was
+> wrong, not the counters. 1.2.0 splits the counters per session
+> (`index.js:sessionCounters`), so the label and the data now agree.
+
 **What it shows, and where each number comes from:**
 
 | Panel figure | Source in this plugin |
@@ -80,7 +102,8 @@ to configure — restart the harness and it is there.
 | Substitution certificates | `gdr/substitution-certificate` records |
 | Trend curve | `certificates[].steps_after` — real step numbers, not estimates |
 | Event stream | the full admissions ring buffer |
-| Audit trail | line count of `$DSH_HOME/harnessmm-audit.jsonl` |
+| Audit trail | line count of `$DSH_HOME/harnessmm-audit.jsonl` (global, not per conversation) |
+| Scope | `scope` / `session` / `knownSessions` in the snapshot, computed by `snapshot.js:buildSnapshot` |
 
 The panel carries a **Data provenance** card that prints these sources live, so any figure
 on screen can be traced back to the field it came from. Every number is read-only: the

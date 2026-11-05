@@ -59,6 +59,17 @@ export const GUARD_FIELDS = Object.freeze([
 const asArray = (v) => (Array.isArray(v) ? v : []);
 const num = (v) => (Number.isFinite(v) ? v : 0);
 
+/** 计数器零值，与 index.js:zeroCounters 保持同一组字段。 */
+function zeroCounters() {
+  return {
+    requests: 0, substitutions: 0, certificates: 0, uncertified: 0,
+    banksAuthored: 0, banksRejected: 0, deferrals: 0, invalidBanks: 0,
+  };
+}
+
+/** 会话 id 的展示前缀（UUID 太长，面板上只显示前 8 位）。 */
+const shortId = (id) => (typeof id === 'string' ? id.slice(0, 8) : '');
+
 /* ------------------------------------------------------------------ 分类 */
 
 /** 事件 → 面板分类；未知 kind 归 null（不猜）。 */
@@ -177,12 +188,13 @@ export function lastGuardFailure(admissions) {
 /* ------------------------------------------------------------------ 动作库 */
 
 /** 从 controller.sessions 提取动作库结构（供 DAG 渲染）。 */
-export function collectBanks(controller) {
+export function collectBanks(controller, onlySession = null) {
   const out = [];
   const sessions = controller?.sessions;
   if (!(sessions instanceof Map)) return out;
 
   for (const [sessionId, state] of sessions) {
+    if (onlySession !== null && sessionId !== onlySession) continue;
     const banks = state?.banks;
     if (!(banks instanceof Map)) continue;
 
@@ -371,20 +383,34 @@ export function notableFindings({ counters, certificates, banks, rejection }) {
  */
 export function buildSnapshot(input) {
   const {
-    controller, counters, policy, minimumChain, config,
-    admissions, startedAt, auditPath, auditLines, now = Date.now(),
+    controller, counters, sessionCounters, policy, minimumChain, config,
+    admissions, startedAt, auditPath, auditLines, now = Date.now(), session = null,
   } = input ?? {};
 
-  const safeCounters = { ...(counters ?? {}) };
-  const list = asArray(admissions);
+  /**
+   * 会话视图：只看这一个对话的账。id 缺失或未知时退化成「空账」，
+   * 绝不悄悄回退成全局数字 —— 那正是这次要修掉的误导。
+   */
+  const scoped = typeof session === 'string' && session.length > 0;
+  const knownSessions = controller?.sessions instanceof Map ? [...controller.sessions.keys()] : [];
+  const known = !scoped || knownSessions.includes(session);
+
+  const safeCounters = scoped
+    ? { ...zeroCounters(), ...(sessionCounters instanceof Map ? sessionCounters.get(session) ?? {} : {}) }
+    : { ...(counters ?? {}) };
+  const list = scoped
+    ? asArray(admissions).filter((ev) => ev?.session === session)
+    : asArray(admissions);
   const certificates = collectCertificates(list);
-  const banks = collectBanks(controller);
+  const banks = collectBanks(controller, scoped ? session : null);
   const rejection = rejectionBreakdown(list);
   const phase = derivePhase(safeCounters);
 
-  const sessions = controller?.sessions instanceof Map ? controller.sessions.size : 0;
+  const sessions = knownSessions.length;
   const pendingActions = controller?.sessions instanceof Map
-    ? [...controller.sessions.values()].reduce((n, s) => n + (s?.pending instanceof Map ? s.pending.size : 0), 0)
+    ? scoped
+      ? (controller.sessions.get(session)?.pending instanceof Map ? controller.sessions.get(session).pending.size : 0)
+      : [...controller.sessions.values()].reduce((n, s) => n + (s?.pending instanceof Map ? s.pending.size : 0), 0)
     : 0;
 
   return {
@@ -392,12 +418,19 @@ export function buildSnapshot(input) {
     generatedAt: new Date(now).toISOString(),
     phase,
 
+    /* 统计口径：本会话 / 全部。面板必须照着它说话，不能自己猜。 */
+    scope: scoped ? 'session' : 'all',
+    session: scoped ? { id: session, short: shortId(session), known } : null,
+    knownSessions: knownSessions.map(shortId),
+
     /* 逐项溯源：界面上的每个数字都能在这里找到出处 */
     provenance: {
       counters: {
-        source: 'index.js:counters',
-        kind: '进程内存计数器',
-        note: '随 DSH 进程重启归零',
+        source: scoped ? `index.js:sessionCounters["${shortId(session)}"]` : 'index.js:counters',
+        kind: scoped ? '会话内存计数器' : '进程内存计数器',
+        note: scoped
+          ? '只统计当前对话；进程重启归零'
+          : '全部对话累加；随 DSH 进程重启归零',
       },
       admissions: {
         source: 'index.js:admissions',
@@ -426,7 +459,10 @@ export function buildSnapshot(input) {
       audit: {
         path: auditPath ?? null,
         lines: auditLines ?? null,
-        note: 'JSONL 追加写；进程重启后仍可追溯',
+        filtered: false,
+        note: scoped
+          ? 'JSONL 追加写，全局一个文件；这里显示的是全部会话的行数'
+          : 'JSONL 追加写；进程重启后仍可追溯',
       },
     },
 

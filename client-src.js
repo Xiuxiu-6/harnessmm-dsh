@@ -14,7 +14,7 @@
  *   页签里就是一片空白 —— 这就是重启后面板白屏的原因。
  *   同理不能用 hooks：hooks 的 dispatcher 属于宿主 React 实例。
  */
-import { createPanel, pollStatus } from './view.js';
+import { createPanel, pollStatus, blankSnapshot } from './view.js';
 
 const TAB_ID = 'harnessmm-dsh';
 const TAB_KIND = 'harnessmm';
@@ -36,7 +36,35 @@ const React = (() => {
 const mounts = new Map();
 const panels = new Set();
 let stopPolling = null;
+/** 只回放给同一个口径的快照，避免把上一个对话的账画到新面板上。 */
 let lastSnapshot = null;
+/** 'session' 跟随当前对话；'all' 统计全部对话。 */
+let scopeMode = readStoredScope();
+/** 当前打开的对话 id，由 uiSession 服务提供。 */
+let currentSessionId = null;
+
+const SCOPE_KEY = 'harnessmm.scope';
+
+function readStoredScope() {
+  try {
+    return globalThis.localStorage?.getItem(SCOPE_KEY) === 'all' ? 'all' : 'session';
+  } catch {
+    return 'session'; // 隐私模式禁了 localStorage：用默认值即可
+  }
+}
+
+function storeScope(mode) {
+  try {
+    globalThis.localStorage?.setItem(SCOPE_KEY, mode);
+  } catch {
+    /* 存不下就算了，下次打开还是默认口径 */
+  }
+}
+
+/** 当前请求口径：跟会话时带 id，全部会话时不带。 */
+function activeSessionId() {
+  return scopeMode === 'session' ? currentSessionId : null;
+}
 
 const ROOT_STYLE = {
   display: 'block',
@@ -48,16 +76,37 @@ const ROOT_STYLE = {
 };
 
 function broadcast(snapshot) {
-  lastSnapshot = snapshot;
+  lastSnapshot = { sessionId: activeSessionId(), snapshot };
   for (const panel of panels) panel.render(snapshot);
+}
+
+/** 换口径或换对话时重启轮询：先把旧数字擦掉，再取新的。 */
+function restartPolling() {
+  if (stopPolling !== null) {
+    stopPolling();
+    stopPolling = null;
+  }
+  lastSnapshot = null;
+  const sessionId = activeSessionId();
+  for (const panel of panels) panel.render(blankSnapshot(sessionId));
+  if (panels.size === 0) return;
+  stopPolling = pollStatus({ render: broadcast }, sessionId === null ? {} : { sessionId });
+}
+
+/** 面板上的口径按钮：本会话 ↔ 全部会话。 */
+function setScope(mode) {
+  const next = mode === 'all' ? 'all' : 'session';
+  if (next === scopeMode) return;
+  scopeMode = next;
+  storeScope(next);
+  restartPolling();
 }
 
 function acquirePolling(panel) {
   panels.add(panel);
-  if (lastSnapshot !== null) panel.render(lastSnapshot);
-  if (stopPolling === null) {
-    stopPolling = pollStatus({ render: broadcast });
-  }
+  if (stopPolling === null) restartPolling();
+  const reusable = lastSnapshot !== null && lastSnapshot.sessionId === activeSessionId();
+  if (reusable) panel.render(lastSnapshot.snapshot);
   return () => {
     panels.delete(panel);
     if (panels.size === 0 && stopPolling !== null) {
@@ -71,7 +120,7 @@ function mount(host) {
   if (mounts.has(host)) return;
   let panel = null;
   try {
-    panel = createPanel(host);
+    panel = createPanel(host, { onScopeChange: setScope });
   } catch (error) {
     // 面板自己崩了也不能连累宿主渲染：把原因写在页签里，别白屏。
     console.error('[harnessmm] 面板挂载失败', error);
@@ -160,4 +209,57 @@ export function apply(ctx) {
     order: VIEW_ORDER,
     label: () => 'HarnessMM',
   }, HarnessMMPanel)), 'harnessmm: conversation view');
+
+  /**
+   * 跟随当前对话。
+   *
+   * uiSession.current 是宿主维护的「现在打开的是哪个会话」，切换对话时会通知
+   * 订阅者。这里用 ctx.get 而不是 inject —— 万一某个版本没有这个服务，
+   * 面板要照常显示（退回全部会话），不能整块不激活。
+   */
+  ctx.effect(() => {
+    let stop = null;
+    let timer = null;
+    let tries = 0;
+
+    const attach = () => {
+      let source = null;
+      try {
+        source = ctx.get?.('uiSession')?.current ?? null;
+      } catch {
+        source = null;
+      }
+      if (source === null || typeof source.subscribe !== 'function') {
+        // 服务可能比插件晚注册：退避重试，最多约 20 秒。
+        if (tries < 80) {
+          tries += 1;
+          timer = setTimeout(attach, 250);
+        }
+        return;
+      }
+
+      const read = () => {
+        let next = null;
+        try {
+          const binding = typeof source.getSnapshot === 'function' ? source.getSnapshot() : source.value;
+          const key = binding?.key;
+          next = typeof key === 'string' && key !== '' ? key : null;
+        } catch {
+          next = null;
+        }
+        if (next === currentSessionId) return;
+        currentSessionId = next;
+        restartPolling();
+      };
+
+      read();
+      stop = source.subscribe(read);
+    };
+
+    attach();
+    return () => {
+      if (timer !== null) clearTimeout(timer);
+      if (typeof stop === 'function') stop();
+    };
+  }, 'harnessmm: follow current session');
 }

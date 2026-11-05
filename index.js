@@ -94,6 +94,14 @@ function sessionKey(options) {
   return String(options?.sessionId ?? 'unscoped');
 }
 
+/** 八个计数器的零值。全局一份，每个会话再各一份。 */
+function zeroCounters() {
+  return {
+    requests: 0, substitutions: 0, certificates: 0, uncertified: 0,
+    banksAuthored: 0, banksRejected: 0, deferrals: 0, invalidBanks: 0,
+  };
+}
+
 export function apply(ctx, config = {}) {
   const resolved = {
     enabled: config.enabled !== false,
@@ -115,10 +123,21 @@ export function apply(ctx, config = {}) {
   const started = Date.now();
   const admissions = [];
   const auditListeners = new Set();
-  const counters = {
-    requests: 0, substitutions: 0, certificates: 0, uncertified: 0,
-    banksAuthored: 0, banksRejected: 0, deferrals: 0, invalidBanks: 0,
-  };
+  const counters = zeroCounters();
+  /**
+   * 每个会话一份同样的计数器。面板按会话展示时读这一份；全局视图仍读 `counters`。
+   * 会话数量与进程内活跃对话数同阶，每份 8 个整数，内存可忽略。
+   */
+  const sessionCounters = new Map();
+
+  /** 同时推进全局计数与所属会话的计数。 */
+  function bump(sessionId, field) {
+    counters[field] += 1;
+    const key = String(sessionId ?? 'unscoped');
+    const scoped = sessionCounters.get(key) ?? zeroCounters();
+    scoped[field] += 1;
+    sessionCounters.set(key, scoped);
+  }
 
   const controller = new GuardedReuseController({
     policy,
@@ -127,13 +146,12 @@ export function apply(ctx, config = {}) {
       admissions.push(event);
       if (admissions.length > 2000) admissions.splice(0, admissions.length - 2000);
       if (event.kind === 'gdr/bank-authored') {
-        if (event.admitted) counters.banksAuthored += 1;
-        else counters.banksRejected += 1;
+        bump(event.session, event.admitted ? 'banksAuthored' : 'banksRejected');
       }
-      if (event.kind === 'gdr/invalid-bank') counters.invalidBanks += 1;
-      if (event.kind === 'gdr/defer') counters.deferrals += 1;
-      if (event.kind === 'gdr/substitution-certificate') counters.certificates += 1;
-      if (event.kind === 'gdr/uncertified-execution') counters.uncertified += 1;
+      if (event.kind === 'gdr/invalid-bank') bump(event.session, 'invalidBanks');
+      if (event.kind === 'gdr/defer') bump(event.session, 'deferrals');
+      if (event.kind === 'gdr/substitution-certificate') bump(event.session, 'certificates');
+      if (event.kind === 'gdr/uncertified-execution') bump(event.session, 'uncertified');
       for (const listener of auditListeners) listener(event);
     },
   });
@@ -204,12 +222,12 @@ export function apply(ctx, config = {}) {
       return;
     }
     const sessionId = sessionKey(options);
-    counters.requests += 1;
+    bump(sessionId, 'requests');
 
     // 1. Can an already-authored action be executed without a reasoning request?
     const step = await controller.prepare({ sessionId, options, tools: options.tools });
     if (step) {
-      counters.substitutions += 1;
+      bump(sessionId, 'substitutions');
       const usage = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
       yield { type: 'block-start', index: 0, blockType: 'tool-call' };
       yield { type: 'tool-call-delta', index: 0, id: step.call.id, name: step.call.name, argumentsDelta: step.call.arguments };
@@ -300,7 +318,7 @@ export function apply(ctx, config = {}) {
   // on the Web server. Every number it shows traces back to `controller`,
   // `counters` or `admissions` above — see snapshot.js provenance.
   const disposePanel = installPanel(ctx, {
-    controller, counters, policy, admissions, startedAt: started,
+    controller, counters, sessionCounters, policy, admissions, startedAt: started,
     minimumChain: resolved.minimumChain,
     config: resolved,
   });

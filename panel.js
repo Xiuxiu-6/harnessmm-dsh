@@ -39,6 +39,20 @@ export function countAuditLines(auditPath) {
   }
 }
 
+/** 从请求里取 `?session=`；缺失或非法一律返回 null（= 全局视图）。 */
+function readSessionParam(req) {
+  try {
+    const raw = req?.url ?? '';
+    const query = raw.includes('?') ? raw.slice(raw.indexOf('?') + 1) : '';
+    const value = new URLSearchParams(query).get('session');
+    if (typeof value !== 'string') return null;
+    const trimmed = value.trim();
+    return trimmed.length === 0 ? null : trimmed;
+  } catch {
+    return null;
+  }
+}
+
 /** 读取面板 HTML（每次请求都读，便于开发期直接改文件看效果）。 */
 function readPanelHtml() {
   try {
@@ -95,9 +109,13 @@ export function installPanel(ctx, deps) {
       handler: async (req, res) => {
         try {
           const auditPath = deps.auditPath ?? auditPathOf();
+          // `?session=<id>` 让面板只看一个对话；不带参数则是全进程视图。
+          // 未知或缺失的 id 一律退回全局，绝不让面板因此变成 500。
+          const session = readSessionParam(req);
           const snapshot = buildSnapshot({
             controller: deps.controller,
             counters: deps.counters,
+            sessionCounters: deps.sessionCounters,
             policy: deps.policy,
             minimumChain: deps.minimumChain,
             config: deps.config,
@@ -105,6 +123,7 @@ export function installPanel(ctx, deps) {
             startedAt: deps.startedAt,
             auditPath,
             auditLines: countAuditLines(auditPath),
+            session,
           });
           sendJson(res, 200, snapshot);
         } catch (error) {

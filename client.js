@@ -4,6 +4,13 @@ var __hmmRequire = typeof require === 'function' ? require : null;
 var HarnessMMClient = (function(exports) {
 	Object.defineProperty(exports, Symbol.toStringTag, { value: "Module" });
 	// panel-css.js
+	/**
+	* 面板样式表。
+	*
+	* 这个文件曾在仓库里丢失（发布包里只带构建产物，所以一直没被发现），
+	* 现从已构建的 client.js 里的 PANEL_CSS 字面量逐字节还原。
+	* 改样式请直接改这里，然后跑 node build-client.mjs。
+	*/
 	const PANEL_CSS = ":root{\n  --bg:#f7f8fa; --card:#ffffff; --border:#e8eaed; --border-soft:#f0f2f4;\n  --text:#1f2328; --muted:#6e7781; --dim:#9aa4b2; --pill:#f4f5f7; --hover:#f8f9fb;\n  --emerald:#10b981; --teal:#14b8a6; --blue:#3b82f6; --cyan:#06b6d4;\n  --violet:#8b5cf6; --pink:#ec4899; --orange:#f97316; --amber:#f59e0b;\n  --red:#ef4444; --slate:#94a3b8;\n  --r:12px;\n  --mono:'Cascadia Code','Consolas','SF Mono','DejaVu Sans Mono',monospace;\n  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;\n}\n*{box-sizing:border-box;margin:0;padding:0}\nhtml,body{background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;font-size:13px}\nbody{padding:16px 18px 60px}\n\n/* 状态条 */\n.statusbar{\n  display:flex;align-items:center;gap:10px;background:var(--card);\n  border:1px solid var(--border);border-radius:var(--r);\n  padding:11px 14px;margin-bottom:14px;border-left:3px solid var(--slate);\n  transition:border-left-color .3s ease;\n}\n.statusbar[data-s=\"B\"]{border-left-color:var(--amber)}\n.statusbar[data-s=\"C\"]{border-left-color:var(--emerald)}\n.sb-dot{width:7px;height:7px;border-radius:50%;background:var(--slate);flex:none;transition:background .3s}\n.statusbar[data-s=\"B\"] .sb-dot{background:var(--amber)}\n.statusbar[data-s=\"C\"] .sb-dot{background:var(--emerald);animation:pulse 1.8s infinite}\n@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}\n.sb-title{font-size:13px;font-weight:650}\n.sb-sub{font-size:12px;color:var(--muted);flex:1}\n.sb-btn{\n  font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:7px;\n  border:1px solid var(--border);background:var(--card);color:var(--muted);\n  cursor:pointer;transition:all .15s;white-space:nowrap;\n}\n.sb-btn:hover{background:var(--hover);color:var(--text)}\n\n/* 状态切换 */\n.switcher{display:flex;gap:6px;margin-bottom:14px;align-items:center;font-size:11px;color:var(--dim)}\n.sw{\n  font-family:inherit;font-size:11.5px;padding:5px 12px;border-radius:7px;\n  border:1px solid var(--border);background:var(--card);color:var(--muted);\n  cursor:pointer;transition:all .15s;\n}\n.sw:hover{background:var(--hover)}\n.sw.on{background:#eef2ff;border-color:#c7d2fe;color:#3730a3;font-weight:600}\n\n/* 栅格 */\n.grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:14px;align-items:start}\n.col-main{display:flex;flex-direction:column;gap:14px;min-width:0}\n.col-side{display:flex;flex-direction:column;gap:14px;min-width:0}\n.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;min-width:0}\n\n/* 卡片 */\n.card{background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:16px 18px;min-width:0}\n.ch{display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}\n.ch svg{width:15px;height:15px;flex:none;color:var(--muted)}\n.ch h2{font-size:13px;font-weight:650;flex:1;min-width:80px}\n.ch .meta{font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums;white-space:nowrap}\n.ch .meta b{color:var(--muted);font-weight:600}\n\n/* 药丸 */\n.pills{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}\n.pill{background:var(--pill);border-radius:10px;padding:11px 15px;min-width:104px;transition:background .2s}\n.pill .pv{font-size:22px;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums;letter-spacing:-.5px}\n.pill .pl{font-size:11.5px;color:var(--muted);margin-top:3px}\n.pill.hi .pv{color:var(--emerald)}\n.pill.dim .pv{color:var(--dim)}\n.pill.warn .pv{color:var(--amber)}\n\n/* 分节 */\n.sect{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}\n.sect h3{font-size:12.5px;font-weight:600}\n.sect .n{margin-left:auto;font-size:11.5px;color:var(--dim);font-variant-numeric:tabular-nums}\n.divider{height:1px;background:var(--border-soft);margin:16px 0}\n\n/* 图例 */\n.legend{display:flex;flex-wrap:wrap;gap:6px 18px}\n.li{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}\n.li .d{width:7px;height:7px;border-radius:2px;flex:none}\n.li b{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}\n\n/* 值得注意 */\n.nb{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:12px;border-bottom:1px solid var(--border-soft)}\n.nb:last-child{border-bottom:0}\n.nb .d{width:7px;height:7px;border-radius:2px;flex:none}\n.nb .k{color:var(--muted);flex:1}\n.nb .v{color:var(--text);font-weight:650;font-family:var(--mono);font-size:11.5px}\n.nb .v em{font-style:normal;color:var(--dim);font-weight:400}\n\n/* 条形图 */\n.bars{display:flex;flex-direction:column;gap:11px}\n.bar-row{display:grid;grid-template-columns:132px 1fr 30px;gap:10px;align-items:center}\n.bar-row .bn{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n.bar-row .bt{height:7px;background:var(--pill);border-radius:4px;overflow:hidden}\n.bar-row .bf{height:100%;border-radius:4px;width:0;transition:width .6s cubic-bezier(.4,0,.2,1)}\n.bar-row .bv{font-size:11.5px;text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}\n.bar-row .bv.hot{color:var(--red);font-weight:600}\n\n/* 环形图 */\n.donut-wrap{display:flex;align-items:center;gap:20px}\n.donut{position:relative;flex:none}\n.donut .ctr{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}\n.donut .ctr .big{font-size:19px;font-weight:700;letter-spacing:-.4px}\n.donut .ctr .sm{font-size:10.5px;color:var(--dim);margin-top:1px}\n.donut-legend{display:flex;flex-direction:column;gap:7px;flex:1;min-width:0}\n.dl{display:flex;align-items:center;gap:7px;font-size:12px}\n.dl .d{width:7px;height:7px;border-radius:2px;flex:none}\n.dl .nm{color:var(--muted);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n.dl .pc{color:var(--text);font-weight:600;font-variant-numeric:tabular-nums}\n\n/* DAG */\n.dag{position:relative;height:196px;margin:2px 0 4px}\n.dag svg.lines{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none}\n.dn{\n  position:absolute;transform:translate(-50%,-50%);background:var(--card);\n  border:1px solid var(--border);border-radius:9px;padding:8px 10px;width:104px;\n  box-shadow:0 1px 2px rgba(16,24,40,.04);transition:all .18s;\n}\n.dn:hover{border-color:#c7d2fe;box-shadow:0 2px 8px rgba(16,24,40,.08)}\n.dn .dk{font-size:9px;letter-spacing:.3px;text-transform:uppercase;color:var(--dim);display:block;margin-bottom:3px}\n.dn .dt{font-size:11.5px;font-weight:650;display:block}\n.dn .do{font-size:10px;color:var(--muted);display:block;margin-top:2px}\n.dn[data-st=\"done\"] .dk{color:var(--cyan)}\n.dn[data-st=\"run\"] .dk{color:var(--amber)}\n.dn[data-st=\"hit\"]{border-color:#a7f3d0;background:#f0fdf9}\n.dn[data-st=\"hit\"] .dk{color:var(--emerald)}\n\n/* 证书行 */\n.rows{display:flex;flex-direction:column}\n.row{display:flex;align-items:center;gap:10px;padding:9px 4px;border-bottom:1px solid var(--border-soft);font-size:12px;transition:background .15s}\n.row:last-child{border-bottom:0}\n.row:hover{background:var(--hover);border-radius:6px}\n.row .ck{color:var(--emerald);flex:none;font-size:11px}\n.row .cid{font-family:var(--mono);font-size:11px;font-weight:700;flex:none;min-width:16px}\n.row .ct{font-family:var(--mono);font-size:11.5px;color:var(--muted);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n.row .cg{\n  font-size:10.5px;padding:2px 7px;border-radius:5px;flex:none;\n  background:#fffbeb;border:1px solid #fde68a;color:#92400e;\n  font-family:var(--mono);white-space:nowrap;\n}\n.row .chv{color:var(--dim);font-size:10px;flex:none;transition:transform .2s ease}\n.row.open .chv{transform:rotate(90deg)}\n\n/* ============ 证书展开 ============ */\n.cert-block{border-bottom:1px solid var(--border-soft)}\n.cert-block:last-child{border-bottom:0}\n.cert-block .row{border-bottom:0;cursor:pointer}\n.cert-block .row.open{background:var(--hover);border-radius:6px}\n.cd{\n  overflow:hidden;max-height:0;opacity:0;padding:0 10px;\n  transition:max-height .4s cubic-bezier(.4,0,.2,1),opacity .25s ease,padding .3s ease;\n}\n.cd.open{max-height:700px;opacity:1;padding:2px 10px 14px}\n.cd-grid{display:flex;flex-direction:column;gap:10px}\n.cd-k{font-size:9.5px;letter-spacing:.5px;text-transform:uppercase;color:var(--dim);margin-bottom:4px}\n.cd-v{\n  font-family:var(--mono);font-size:10.8px;line-height:1.65;color:var(--text);\n  background:var(--pill);border-radius:6px;padding:7px 9px;\n  white-space:pre-wrap;word-break:break-all;\n}\n.cd-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}\n.cd-kv{display:flex;gap:8px;font-size:10.8px;font-family:var(--mono);padding:2.5px 0}\n.cd-kv .kk{color:var(--dim);flex:none;min-width:118px}\n.cd-kv .vv{color:var(--text);word-break:break-all}\n.cd-kv .vv.ok{color:var(--emerald);font-weight:600}\n@keyframes flashRow{\n  0%{background:transparent}\n  12%{background:#d1fae5}\n  65%{background:#ecfdf5}\n  100%{background:transparent}\n}\n.cert-block.flash .row{animation:flashRow 1.9s ease}\n\n/* 趋势 */\n.chart{position:relative;margin-top:4px}\n.chart svg{display:block;width:100%;height:auto}\n.axis{display:flex;justify-content:space-between;font-size:10.5px;color:var(--dim);margin-top:7px;font-variant-numeric:tabular-nums}\n\n/* 开关组 */\n.seg{display:inline-flex;gap:2px;padding:2px;background:var(--pill);border-radius:8px}\n.seg button{font-family:inherit;font-size:11px;padding:4px 10px;border-radius:6px;border:0;background:transparent;color:var(--muted);cursor:pointer;transition:all .15s}\n.seg button.on{background:var(--card);color:var(--text);font-weight:600;box-shadow:0 1px 2px rgba(16,24,40,.06)}\n\n/* ============ 筛选 chips ============ */\n.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}\n.chip{\n  font-family:inherit;font-size:11.5px;padding:4px 10px;border-radius:7px;\n  border:1px solid var(--border);background:var(--card);color:var(--muted);\n  cursor:pointer;transition:all .15s;display:inline-flex;align-items:center;gap:6px;\n}\n.chip:hover{background:var(--hover)}\n.chip.on{background:#eef2ff;border-color:#c7d2fe;color:#3730a3;font-weight:600}\n.chip .n{font-size:10.5px;opacity:.7;font-variant-numeric:tabular-nums}\n.chip .dt{width:6px;height:6px;border-radius:2px;flex:none}\n\n/* ============ 事件行 ============ */\n.events{display:flex;flex-direction:column}\n.evrow{\n  display:flex;align-items:center;gap:10px;padding:7px 6px;\n  border-bottom:1px solid var(--border-soft);font-size:12px;\n  transition:background .15s;\n}\n.evrow:last-child{border-bottom:0}\n.evrow:hover{background:var(--hover);border-radius:6px}\n.evi{width:14px;text-align:center;font-size:11px;flex:none;font-weight:700}\n.evk{font-size:10.5px;padding:1.5px 7px;border-radius:4px;flex:none;min-width:42px;text-align:center;font-weight:600}\n.evd{\n  flex:1;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;\n  font-family:var(--mono);font-size:11px;min-width:0;\n}\n.evp{color:var(--dim);font-size:10.5px;flex:none;font-variant-numeric:tabular-nums;font-family:var(--mono)}\n.evt{color:var(--dim);font-size:10.5px;flex:none;font-variant-numeric:tabular-nums;min-width:52px;text-align:right}\n.evfoot{padding-top:10px;font-size:11px;color:var(--dim);text-align:center}\n.evrow.linkable{cursor:pointer}\n.evrow.linkable:hover{background:#ecfdf5;border-radius:6px}\n.evgo{font-size:10px;color:var(--emerald);flex:none;opacity:0;transition:opacity .15s}\n.evrow.linkable:hover .evgo{opacity:1}\n\n/* ============ 趋势 tooltip ============ */\n.tip{\n  position:absolute;pointer-events:none;opacity:0;z-index:10;\n  background:#1f2328;color:#fff;font-size:11px;line-height:1.55;\n  padding:8px 11px;border-radius:8px;white-space:nowrap;\n  transform:translate(-50%,-114%);transition:opacity .12s ease;\n  box-shadow:0 4px 14px rgba(0,0,0,.2);\n}\n.tip.on{opacity:1}\n.tip .th{font-weight:700;margin-bottom:4px;color:#a7f3d0;font-size:11px}\n.tip .tv{display:flex;justify-content:space-between;gap:16px;color:#cbd5e1}\n.tip .tv b{color:#fff;font-weight:600}\n.guide{stroke:#10b981;stroke-width:1;stroke-dasharray:3 3;opacity:0;transition:opacity .12s}\n.guide.on{opacity:.45}\n\n/* 侧栏 */\n.kv{display:flex;align-items:center;gap:9px;padding:7px 0;font-size:12px}\n.kv .k{color:var(--muted);flex:none;min-width:76px}\n.kv .v{margin-left:auto;color:var(--text);font-weight:600;font-family:var(--mono);font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n.about{font-size:12px;line-height:1.75;color:var(--muted)}\n.about b{color:var(--text);font-weight:650}\n.about code{font-family:var(--mono);font-size:11px;background:var(--pill);padding:1px 4px;border-radius:3px}\n.note{margin-top:10px;padding:10px 12px;border-radius:9px;background:var(--pill);font-size:11.5px;line-height:1.7;color:var(--muted)}\n.note b{color:var(--text)}\n.empty{padding:22px 4px;text-align:center;font-size:12px;color:var(--dim);line-height:1.7}\n\n@media(max-width:1180px){\n  .grid{grid-template-columns:minmax(0,1fr)}\n  .col-side{flex-direction:row;flex-wrap:wrap}\n  .col-side .card{flex:1;min-width:280px}\n}\n@media(max-width:820px){\n  .row2{grid-template-columns:1fr}\n  .pills{gap:8px}\n  .pill{flex:1;min-width:0;padding:10px 12px}\n  .pill .pv{font-size:19px}\n  .evp{display:none}\n}\n\n/* ---- 追加：在 DSH 里以 shadow root 挂载时的容器样式 ---- */\n.hmm-root{\n  \n  --bg:#f7f8fa; --card:#ffffff; --border:#e8eaed; --border-soft:#f0f2f4;\n  --text:#1f2328; --muted:#6e7781; --dim:#9aa4b2; --pill:#f4f5f7; --hover:#f8f9fb;\n  --emerald:#10b981; --teal:#14b8a6; --blue:#3b82f6; --cyan:#06b6d4;\n  --violet:#8b5cf6; --pink:#ec4899; --orange:#f97316; --amber:#f59e0b;\n  --red:#ef4444; --slate:#94a3b8;\n  --r:12px;\n  --mono:'Cascadia Code','Consolas','SF Mono','DejaVu Sans Mono',monospace;\n  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;\n\n  container-type:inline-size;\n  box-sizing:border-box;\n  background:var(--bg);color:var(--text);font-family:var(--sans);\n  -webkit-font-smoothing:antialiased;font-size:14px;line-height:1.6;\n  padding:20px 22px 64px;min-height:100%;\n}\n.hmm-root *{box-sizing:border-box;margin:0;padding:0}\n.hmm-root .card,.hmm-root .statusbar{background:var(--card)}\n\n/* 溯源徽标：每个卡片右上角的「源」 */\n.src{\n  font-family:var(--mono);font-size:10px;line-height:1.4;\n  color:var(--dim);border:1px solid var(--border);border-radius:5px;\n  padding:1px 6px;cursor:help;white-space:nowrap;max-width:260px;\n  overflow:hidden;text-overflow:ellipsis;\n}\n.src:hover{color:var(--muted);border-color:#d8dde3}\n\n/* 状态胶囊：当前相位只读展示 */\n.sw.cur{background:#eef2ff;border-color:#c7d2fe;color:#3730a3;font-weight:600;cursor:default}\n.sw.idle{cursor:default;opacity:.55}\n\n/* 空态居中 */\n.empty-c{display:flex;align-items:center;justify-content:center;padding:22px 10px;text-align:center;\n  font-size:12px;color:var(--dim);line-height:1.7}\n\n/* 证书证明区：等宽数字 */\n.cd-kv .vv{font-family:var(--mono);font-size:10.5px;word-break:break-all}\n.cd-v{max-height:220px;overflow:auto}\n\n/* 动作库图：深链横向滚动，节点不互相挤压 */\n.hmm-root .dag{overflow-x:auto;overflow-y:hidden;padding-bottom:2px}\n.hmm-root .dag-canvas{position:relative;min-width:100%}\n.hmm-root .dn{width:auto;min-width:76px;max-width:104px;padding:7px 9px}\n.hmm-root .dn .dt{font-size:11px}\n.hmm-root .kv .v{min-width:0}\n\n/* 证书行：守卫摘要过长时截断，不撑破卡片 */\n.hmm-root .row .cg{min-width:0;max-width:52%;overflow:hidden;text-overflow:ellipsis}\n.hmm-root .row .ct{min-width:40px}\n\n/* 数据溯源清单：标签一行、路径一行，窄栏里也能读 */\n.prov{padding:7px 0;border-bottom:1px solid var(--border-soft)}\n.prov:last-child{border-bottom:0}\n.prov-k{font-size:11.5px;color:var(--muted);margin-bottom:2px}\n.prov-v{font-family:var(--mono);font-size:10px;color:var(--text);line-height:1.5;word-break:break-all}\n\n/* ============================================================\n   排版层：把 mockup 的紧凑密度调成 dsh-context 那种呼吸感\n   —— 正文 14px、卡片 20/22 内边距、块间距 16px、统计块 28px 数字。\n   一律挂在 .hmm-root 下，shadow 与独立页都生效。\n   ============================================================ */\n.hmm-root{font-size:14px;line-height:1.6}\n.hmm-root .grid{grid-template-columns:minmax(0,1fr) 360px;gap:16px}\n.hmm-root .col-main,.hmm-root .col-side{gap:16px}\n.hmm-root .row2{gap:16px}\n.hmm-root .card{padding:20px 22px;border-radius:14px}\n.hmm-root .ch{gap:9px;margin-bottom:16px}\n.hmm-root .ch svg{width:16px;height:16px}\n.hmm-root .ch h2{font-size:15px;font-weight:650;letter-spacing:-.1px}\n.hmm-root .ch .meta{font-size:12.5px}\n\n.hmm-root .statusbar{padding:12px 16px;gap:10px;margin-bottom:16px;border-radius:12px}\n.hmm-root .sb-title{font-size:14px}\n.hmm-root .sb-sub{font-size:12.5px;line-height:1.55}\n.hmm-root .switcher{font-size:12px;gap:8px;margin-bottom:16px}\n.hmm-root .sw{padding:4px 10px;font-size:12px;border-radius:7px}\n\n.hmm-root .pills{gap:14px;margin-bottom:20px}\n.hmm-root .pill{padding:14px 18px;min-width:118px;border-radius:12px}\n.hmm-root .pill .pv{font-size:28px;line-height:1.05;letter-spacing:-.8px}\n.hmm-root .pill .pl{font-size:12.5px;margin-top:5px}\n/* 每块一个固定色，跟 dsh-context 的统计块一致：数字本身带色，零值也不发灰 */\n.hmm-root .pill.tone-blue .pv{color:var(--blue)}\n.hmm-root .pill.tone-emerald .pv{color:var(--emerald)}\n.hmm-root .pill.tone-violet .pv{color:var(--violet)}\n.hmm-root .pill.tone-amber .pv{color:var(--amber)}\n.hmm-root .pill.tone-slate .pv{color:var(--text)}\n.hmm-root .pill.dim{background:var(--pill)}\n.hmm-root .pill.dim .pv{color:#9aa4b2}\n\n.hmm-root .sect{margin-bottom:12px;gap:10px}\n.hmm-root .sect h3{font-size:13.5px}\n.hmm-root .sect .n{font-size:12.5px}\n.hmm-root .divider{margin:20px 0}\n\n.hmm-root .legend{gap:9px 22px}\n.hmm-root .li{font-size:13px;gap:8px}\n.hmm-root .li .d{width:8px;height:8px}\n.hmm-root .nb{padding:10px 0;font-size:13px;gap:10px}\n.hmm-root .nb .v{font-size:12.5px}\n\n.hmm-root .rows{margin-top:2px}\n.hmm-root .row{padding:12px 6px;font-size:13px;gap:12px}\n.hmm-root .row .cid{font-size:12px}\n.hmm-root .row .ct{font-size:12.5px}\n.hmm-root .row .ck,.hmm-root .row .chv{font-size:12px}\n\n.hmm-root .bar-row{grid-template-columns:168px 1fr 34px;gap:12px}\n.hmm-root .bar-row .bn{font-size:12px}\n.hmm-root .bar-row .bt{height:8px;border-radius:5px}\n.hmm-root .bar-row .bv{font-size:12.5px}\n\n.hmm-root .donut-wrap{gap:24px}\n.hmm-root .donut .ctr .big{font-size:24px}\n.hmm-root .donut .ctr .sm{font-size:11.5px;margin-top:2px}\n.hmm-root .donut-legend{gap:11px}\n.hmm-root .dl{font-size:13px;gap:8px}\n.hmm-root .dl .d{width:8px;height:8px}\n\n.hmm-root .dn{padding:9px 11px;min-width:84px;max-width:116px}\n.hmm-root .dn .dk{font-size:10px;margin-bottom:4px}\n.hmm-root .dn .dt{font-size:12px}\n.hmm-root .dn .do{font-size:11px;margin-top:3px}\n\n.hmm-root .evrow{padding:12px 8px;gap:10px}\n.hmm-root .evk{font-size:11px;padding:2px 8px;min-width:48px}\n.hmm-root .evd{font-size:12.5px}\n.hmm-root .evp,.hmm-root .evt{font-size:11.5px}\n.hmm-root .evi{font-size:12px}\n.hmm-root .evfoot{font-size:12px;padding-top:12px}\n\n.hmm-root .chips{gap:8px;margin-bottom:14px}\n.hmm-root .chip{font-size:12.5px;padding:5px 10px;border-radius:8px}\n.hmm-root .chip .n{font-size:11px}\n\n.hmm-root .kv{padding:9px 0;font-size:13px;gap:10px}\n.hmm-root .kv .k{min-width:82px}\n.hmm-root .kv .v{font-size:12.5px}\n.hmm-root .about{font-size:13px;line-height:1.85}\n.hmm-root .about code{font-size:11.5px}\n.hmm-root .note{margin-top:12px;padding:12px 14px;font-size:12.5px;line-height:1.8;border-radius:10px}\n.hmm-root .empty{padding:26px 6px;font-size:13px;line-height:1.8}\n.hmm-root .empty-c{padding:30px 12px;font-size:13px;line-height:1.8}\n\n.hmm-root .axis{font-size:11.5px;margin-top:9px}\n/* 没有数据时不要把空图框撑着：只留一行说明 */\n.hmm-root .chart.is-empty svg{display:none}\n.hmm-root .chart.is-empty{margin-top:0}\n.hmm-root .chart.is-empty .axis{justify-content:center;font-size:13px;padding:26px 0;margin-top:0}\n.hmm-root .cd-k{font-size:10.5px;margin-bottom:5px}\n.hmm-root .cd-kv{font-size:11.5px;padding:4px 0;gap:10px}\n.hmm-root .cd-kv .kk{min-width:126px}\n.hmm-root .cd-grid{gap:12px}\n.hmm-root .cd.open{padding:4px 12px 18px}\n.hmm-root .seg button{font-size:12px;padding:5px 11px}\n\n.hmm-root .src{font-size:11px;padding:2px 7px;max-width:300px}\n.hmm-root .prov{padding:10px 0}\n.hmm-root .prov-k{font-size:12.5px;margin-bottom:3px}\n/* 只在放不下时才断词，优先在空格处换行，长标识符不会被切成两截 */\n.hmm-root .prov-v{font-size:11.5px;line-height:1.65;word-break:normal;overflow-wrap:break-word}\n\n@container (max-width:980px){\n  .hmm-root .grid{grid-template-columns:minmax(0,1fr)}\n  .hmm-root .col-side{flex-direction:row;flex-wrap:wrap}\n  .hmm-root .col-side>.card{flex:1 1 300px}\n}\n@container (max-width:760px){\n  .hmm-root .row2{grid-template-columns:1fr}\n}\n";
 	// view.js
 	/**
@@ -236,6 +243,16 @@ var HarnessMMClient = (function(exports) {
 		pulse: "<path d=\"M22 12h-4l-3 9L9 3l-3 9H2\"/>",
 		bulb: "<path d=\"M9 18h6\"/><path d=\"M10 22h4\"/><path d=\"M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z\"/>"
 	};
+	const SCOPE_CSS = `
+.sb-scope{
+  font-family:inherit;font-size:11.5px;padding:5px 11px;border-radius:999px;
+  border:1px solid var(--border);background:var(--pill);color:var(--muted);
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.sb-scope:hover{background:var(--hover);color:var(--text)}
+.sb-scope[data-scope="session"]{background:var(--card);color:var(--text);border-color:var(--emerald)}
+.sb-scope[data-scope="session"]::before{content:"";display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--emerald);margin-right:6px;vertical-align:1px}
+`;
 	const SKELETON = `
 <div class="hmm-root">
   <div class="switcher" id="phasebar"></div>
@@ -244,6 +261,7 @@ var HarnessMMClient = (function(exports) {
     <span class="sb-dot"></span>
     <span class="sb-title" id="sbTitle">—</span>
     <span class="sb-sub" id="sbSub">正在读取插件状态…</span>
+    <button class="sb-scope" id="sbScope" type="button" title="切换统计口径：本会话 / 全部会话">本会话</button>
     <button class="sb-btn" id="sbBtn" type="button">—</button>
   </div>
 
@@ -251,9 +269,9 @@ var HarnessMMClient = (function(exports) {
     <div class="col-main">
 
       <section class="card" id="statCard">
-        ${cardHead(ICONS.chart, "决策复用统计", "本会话", {
+        ${cardHead(ICONS.chart, "决策复用统计", "<span id=\"statMeta\">本会话</span>", {
 		label: "index.js:counters",
-		title: "进程内存计数器（counters）。随 DSH 进程重启归零；守卫命中率由 substitutions / (substitutions + deferrals + uncertified) 计算。"
+		title: "本会话计数来自 index.js:sessionCounters，切到「全部会话」时改用 index.js:counters。随 DSH 进程重启归零；守卫命中率由 substitutions / (substitutions + deferrals + uncertified) 计算。"
 	})}
         <div class="pills">
           <div class="pill dim" id="p1"><div class="pv" id="v1">0</div><div class="pl">跳过推理</div></div>
@@ -431,7 +449,7 @@ var HarnessMMClient = (function(exports) {
 	function createPanel(host, options = {}) {
 		const shadow = options.shadow !== false && typeof host.attachShadow === "function";
 		const root = shadow ? host.shadowRoot ?? host.attachShadow({ mode: "open" }) : host;
-		root.innerHTML = `${shadow ? `<style>${PANEL_CSS}</style>` : ""}${SKELETON}`;
+		root.innerHTML = `${shadow ? `<style>${PANEL_CSS}${SCOPE_CSS}</style>` : ""}${SKELETON}`;
 		const scope = root.querySelector(".hmm-root");
 		const byId = (id) => root.getElementById ? root.getElementById(id) : root.querySelector(`#${id}`);
 		const el = {
@@ -439,6 +457,8 @@ var HarnessMMClient = (function(exports) {
 			statusbar: byId("statusbar"),
 			sbTitle: byId("sbTitle"),
 			sbSub: byId("sbSub"),
+			sbScope: byId("sbScope"),
+			statMeta: byId("statMeta"),
 			sbBtn: byId("sbBtn"),
 			toolTotal: byId("toolTotal"),
 			toolLegend: byId("toolLegend"),
@@ -525,6 +545,10 @@ var HarnessMMClient = (function(exports) {
 				renderEvents(state.data);
 			}
 		});
+		el.sbScope.addEventListener("click", () => {
+			const next = state.data?.scope === "session" ? "all" : "session";
+			if (typeof options.onScopeChange === "function") options.onScopeChange(next);
+		});
 		el.sbBtn.addEventListener("click", () => {
 			const phase = PHASE[state.data?.phase] ?? PHASE.A;
 			const target = byId(phase.target);
@@ -573,14 +597,22 @@ var HarnessMMClient = (function(exports) {
 			el.sbTitle.textContent = data.offline === void 0 ? info.title : "读取失败";
 			el.sbBtn.textContent = data.offline === void 0 ? info.btn : "什么样的任务会触发？";
 			if (data.offline !== void 0) el.sbSub.textContent = `无法读取 /plugins/harnessmm/status：${data.offline}（宿主插件可能未启动或路由未注册）`;
+			const scoped = data.scope === "session";
+			const short = obj(data.session).short;
+			const scopeLabel = scoped ? short === void 0 || short === null ? "本会话" : `本会话 · ${short}` : "全部会话";
+			el.sbScope.textContent = scopeLabel;
+			el.sbScope.dataset.scope = scoped ? "session" : "all";
+			el.sbScope.title = scoped ? "只统计当前这个对话；点击切换为全部会话" : "统计全部对话；点击切换回本会话";
+			el.statMeta.textContent = scopeLabel;
 			const counters = obj(obj(data.status).counters);
 			const banks = asArray(data.banks);
 			const certs = asArray(data.certificates);
 			const rate = obj(data.diagnostics).guardHitRate;
 			const last = obj(data.diagnostics).lastGuardFailure;
 			const parts = [];
+			const subject = scoped ? "本次会话" : "全部会话累计";
 			if (phase === "C") {
-				parts.push(`本次会话已跳过 ${num(counters.substitutions)} 次推理请求`);
+				parts.push(`${subject}已跳过 ${num(counters.substitutions)} 次推理请求`);
 				parts.push(`守卫命中率 ${rate === null || rate === void 0 ? "—" : `${rate}%`}`);
 				const ago = agoOf(certs.length > 0 ? certs[certs.length - 1].at : null, Date.now());
 				if (ago !== null) parts.push(`最近一次 ${ago}`);
@@ -593,11 +625,16 @@ var HarnessMMClient = (function(exports) {
 					parts.push(`最近一次守卫未命中：${reasons === "" ? "未知原因" : reasons}`);
 				} else parts.push("尚未出现守卫求值");
 			} else {
-				parts.push(`本次会话已记录 ${num(counters.requests)} 次推理请求`);
+				parts.push(`${subject}已记录 ${num(counters.requests)} 次推理请求`);
 				parts.push("0 个合格动作库");
 				parts.push("这不是故障：探索性任务本来就不该被复用");
 			}
 			if (data.offline === void 0) el.sbSub.textContent = parts.join(" · ");
+			if (data.offline === void 0 && data.loading === true) el.sbSub.textContent = scoped ? "正在读取本会话…" : "正在读取全部会话…";
+			if (data.offline === void 0 && scoped && obj(data.session).known === false) {
+				el.statusbar.dataset.s = "A";
+				el.sbSub.textContent = `本会话还没有被插件记录（宿主会话 ${short ?? "未知"}）。新建对话、还没发过消息时就是这种状态。`;
+			}
 			el.phasebar.innerHTML = "<span>当前状态：</span>" + [
 				"A",
 				"B",
@@ -1065,9 +1102,13 @@ var HarnessMMClient = (function(exports) {
 	/**
 	* 轮询 /plugins/harnessmm/status，把每份新快照交给面板。
 	* 同一份快照（文本完全一致）不会触发重绘，避免打断展开/悬停状态。
+	*
+	* `options.sessionId` 存在时只取那一个对话的账；不存在时是全局视图。
 	*/
 	function pollStatus(panel, options = {}) {
-		const url = options.url ?? "/plugins/harnessmm/status";
+		const base = options.url ?? "/plugins/harnessmm/status";
+		const sessionId = typeof options.sessionId === "string" && options.sessionId !== "" ? options.sessionId : null;
+		const url = sessionId === null ? base : `${base}?session=${encodeURIComponent(sessionId)}`;
 		const interval = options.interval ?? 2e3;
 		let signature = "";
 		let stopped = false;
@@ -1143,6 +1184,36 @@ var HarnessMMClient = (function(exports) {
 			}
 		};
 	}
+	/**
+	* 切换会话时的占位快照：结构齐全、数字清零，只说明「正在读取」。
+	*
+	* 用它先把上一个对话的数字擦掉，否则切过去会看到别人的账 —— 那正是这一版
+	* 要修的问题。复用 offline() 的骨架，保证任何渲染分支都不会读到 undefined。
+	*/
+	function blankSnapshot(sessionId = null) {
+		const base = offline("正在读取…");
+		delete base.offline;
+		base.schema = "harnessmm-panel/blank";
+		base.loading = true;
+		base.scope = sessionId === null ? "all" : "session";
+		base.session = sessionId === null ? null : {
+			id: sessionId,
+			short: String(sessionId).slice(0, 8),
+			known: true
+		};
+		base.knownSessions = [];
+		base.status.counters = {
+			requests: 0,
+			substitutions: 0,
+			certificates: 0,
+			uncertified: 0,
+			banksAuthored: 0,
+			banksRejected: 0,
+			deferrals: 0,
+			invalidBanks: 0
+		};
+		return base;
+	}
 	// client-src.js
 	/**
 	* HarnessMM 面板 —— DSH 浏览器侧入口。
@@ -1179,7 +1250,29 @@ var HarnessMMClient = (function(exports) {
 	const mounts = /* @__PURE__ */ new Map();
 	const panels = /* @__PURE__ */ new Set();
 	let stopPolling = null;
+	/** 只回放给同一个口径的快照，避免把上一个对话的账画到新面板上。 */
 	let lastSnapshot = null;
+	/** 'session' 跟随当前对话；'all' 统计全部对话。 */
+	let scopeMode = readStoredScope();
+	/** 当前打开的对话 id，由 uiSession 服务提供。 */
+	let currentSessionId = null;
+	const SCOPE_KEY = "harnessmm.scope";
+	function readStoredScope() {
+		try {
+			return globalThis.localStorage?.getItem(SCOPE_KEY) === "all" ? "all" : "session";
+		} catch {
+			return "session";
+		}
+	}
+	function storeScope(mode) {
+		try {
+			globalThis.localStorage?.setItem(SCOPE_KEY, mode);
+		} catch {}
+	}
+	/** 当前请求口径：跟会话时带 id，全部会话时不带。 */
+	function activeSessionId() {
+		return scopeMode === "session" ? currentSessionId : null;
+	}
 	const ROOT_STYLE = {
 		display: "block",
 		width: "100%",
@@ -1189,13 +1282,36 @@ var HarnessMMClient = (function(exports) {
 		background: "transparent"
 	};
 	function broadcast(snapshot) {
-		lastSnapshot = snapshot;
+		lastSnapshot = {
+			sessionId: activeSessionId(),
+			snapshot
+		};
 		for (const panel of panels) panel.render(snapshot);
+	}
+	/** 换口径或换对话时重启轮询：先把旧数字擦掉，再取新的。 */
+	function restartPolling() {
+		if (stopPolling !== null) {
+			stopPolling();
+			stopPolling = null;
+		}
+		lastSnapshot = null;
+		const sessionId = activeSessionId();
+		for (const panel of panels) panel.render(blankSnapshot(sessionId));
+		if (panels.size === 0) return;
+		stopPolling = pollStatus({ render: broadcast }, sessionId === null ? {} : { sessionId });
+	}
+	/** 面板上的口径按钮：本会话 ↔ 全部会话。 */
+	function setScope(mode) {
+		const next = mode === "all" ? "all" : "session";
+		if (next === scopeMode) return;
+		scopeMode = next;
+		storeScope(next);
+		restartPolling();
 	}
 	function acquirePolling(panel) {
 		panels.add(panel);
-		if (lastSnapshot !== null) panel.render(lastSnapshot);
-		if (stopPolling === null) stopPolling = pollStatus({ render: broadcast });
+		if (stopPolling === null) restartPolling();
+		if (lastSnapshot !== null && lastSnapshot.sessionId === activeSessionId()) panel.render(lastSnapshot.snapshot);
 		return () => {
 			panels.delete(panel);
 			if (panels.size === 0 && stopPolling !== null) {
@@ -1208,7 +1324,7 @@ var HarnessMMClient = (function(exports) {
 		if (mounts.has(host)) return;
 		let panel = null;
 		try {
-			panel = createPanel(host);
+			panel = createPanel(host, { onScopeChange: setScope });
 		} catch (error) {
 			console.error("[harnessmm] 面板挂载失败", error);
 			host.textContent = `HarnessMM 面板挂载失败：${error && error.message ? error.message : String(error)}`;
@@ -1282,6 +1398,52 @@ var HarnessMMClient = (function(exports) {
 			order: VIEW_ORDER,
 			label: () => "HarnessMM"
 		}, HarnessMMPanel)), "harnessmm: conversation view");
+		/**
+		* 跟随当前对话。
+		*
+		* uiSession.current 是宿主维护的「现在打开的是哪个会话」，切换对话时会通知
+		* 订阅者。这里用 ctx.get 而不是 inject —— 万一某个版本没有这个服务，
+		* 面板要照常显示（退回全部会话），不能整块不激活。
+		*/
+		ctx.effect(() => {
+			let stop = null;
+			let timer = null;
+			let tries = 0;
+			const attach = () => {
+				let source = null;
+				try {
+					source = ctx.get?.("uiSession")?.current ?? null;
+				} catch {
+					source = null;
+				}
+				if (source === null || typeof source.subscribe !== "function") {
+					if (tries < 80) {
+						tries += 1;
+						timer = setTimeout(attach, 250);
+					}
+					return;
+				}
+				const read = () => {
+					let next = null;
+					try {
+						const key = (typeof source.getSnapshot === "function" ? source.getSnapshot() : source.value)?.key;
+						next = typeof key === "string" && key !== "" ? key : null;
+					} catch {
+						next = null;
+					}
+					if (next === currentSessionId) return;
+					currentSessionId = next;
+					restartPolling();
+				};
+				read();
+				stop = source.subscribe(read);
+			};
+			attach();
+			return () => {
+				if (timer !== null) clearTimeout(timer);
+				if (typeof stop === "function") stop();
+			};
+		}, "harnessmm: follow current session");
 	}
 	exports.apply = apply;
 	exports.inject = inject;

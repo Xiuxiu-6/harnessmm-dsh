@@ -79,5 +79,8 @@
   "bugs": {
     "url": "https://github.com/Xiuxiu-6/harnessmm-dsh/issues"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "rolldown": "^1.2.16"
+  }
 }

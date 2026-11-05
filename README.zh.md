@@ -58,6 +58,12 @@
 | **趋势曲线** | `certificates[].steps_after`（真实步号） | `snapshot.js:trendSeries` | 同上 |
 | **事件流** | `admissions` 全量 | `snapshot.js:eventClassCounts` | 缓冲 2000 条 |
 | **审计行数** | `$DSH_HOME/harnessmm-audit.jsonl` 行数 | `panel.js:countAuditLines` | 磁盘持久 |
+| **统计口径** | 快照里的 `scope` / `session` / `knownSessions` | `snapshot.js:buildSnapshot` | 每次请求现算 |
+
+> **口径（1.2.0 起）**：上表除「审计行数」外，都可以按会话过滤。
+> 面板默认只统计**当前对话**，读的是 `index.js:sessionCounters[<sessionId>]`；
+> 点右上角角标切到「全部会话」才读进程级的 `index.js:counters`。
+> 「审计行数」是全局一个 JSONL 文件，不分会话，面板上会如实标明。
 
 **9 种事件 → 5 个分类**（分类表在 `snapshot.js:EVENT_CLASS`，键与插件实际记录的 `kind` 逐字对应）：
 
@@ -146,6 +152,29 @@ http://127.0.0.1:<你的 DSH 端口>/plugins/harnessmm/panel
 **B. DSH 右侧栏 tab**
 
 重启后右侧栏应出现「HarnessMM」tab。若未出现，见 §6 已知限制。
+
+### 4.6 面板统计口径：跟着对话走
+
+面板默认**只统计当前打开的这一个对话**：
+
+- 打开对话 A → 显示 A 的跳过次数、证书、动作库
+- 切到对话 B → 面板立刻换成 B 的，不会带着 A 的数字
+- 新建对话 → 全部是 0，并说明「本会话还没有被插件记录」
+
+右上角有个角标：
+
+```
+[ 本会话 · 3f2a1b8c ]   ← 默认，只统计当前对话
+[ 全部会话 ]            ← 点一下切换，看进程内所有对话的总账
+```
+
+- 切换按钮会记住选择（存在 `localStorage` 的 `harnessmm.scope`）
+- 右侧栏那个 tab 和对话头部页签**行为一致**，都跟随当前对话
+- 会话 id 取的是宿主 `uiSession.current`，和引擎记录用的 `sessionId` 是同一个 UUID
+
+**为什么改**：1.1.x 的计数器是进程级的，面板却写着「本会话」——
+数字对不上，属于措辞错误。1.2.0 把计数按会话拆开（`index.js:sessionCounters`），
+面板的口径和文字现在一致了。
 
 ---
 
@@ -243,15 +272,20 @@ curl -i http://127.0.0.1:<port>/plugins/harnessmm/status
 
 ## 8. 重新构建客户端
 
-改了 `client-src.js` 后：
+改了 `client-src.js` / `view.js` / `panel-css.js` 后：
 
 ```sh
+npm install          # 第一次才要，装 rolldown
 node build-client.mjs
-node test-client.mjs
+npm test             # 30 项，含 bundle 冒烟测试
 ```
 
 构建产物是 `window.__ModuleLoader__.load({id, factory})` 包裹的 IIFE，
 格式对齐 `dsh-context@0.78.2` 的 `lib/client.js`。
+
+**关于 `panel.html`**：它是独立页面，代码是面板的一份手抄副本（不参与上面的构建）。
+改面板时两边都要改。它显示的是**全部会话**——一个独立浏览器标签页没有「当前对话」
+可言，所以它如实写着全部会话，而不是假装跟着某个对话。
 
 ---
 
