@@ -135,6 +135,40 @@ function resetScroll(node) {
   }
 }
 
+/**
+ * 对话页底部的输入框（`[data-composer-seat]`）是宿主的外壳，不是面板画的。
+ *
+ * `dsh-client-ui-conversation/lib/client.js` 里对话页的结构是：
+ *
+ *   <div data-conversation-scroll>
+ *     <Views />          // 页签内容：对话 / 上下文 / HarnessMM
+ *     {composerSeat}     // 输入框，无条件渲染，position:sticky bottom:0
+ *   </div>
+ *
+ * 两者是兄弟节点，宿主没有提供「本页签不要输入框」的开关，所以内置的「上下文」
+ * 页签同样带着它。面板铺满时它会挡住底部内容，因此在**本页签可见**期间把它收起来，
+ * 切回对话立刻放出来。
+ *
+ * 只在对话页签实例上生效：侧栏那个实例的祖先里没有 `data-conversation-scroll`。
+ */
+const COMPOSER_ATTR = 'data-harnessmm-composer-hidden';
+const COMPOSER_STYLE_ID = 'harnessmm-composer-style';
+
+function ensureComposerStyle() {
+  if (document.getElementById(COMPOSER_STYLE_ID) !== null) return;
+  const style = document.createElement('style');
+  style.id = COMPOSER_STYLE_ID;
+  style.textContent = `[data-composer-seat][${COMPOSER_ATTR}]{display:none !important}`;
+  document.head.appendChild(style);
+}
+
+function applyComposer(entry) {
+  const seat = entry.scroller?.querySelector('[data-composer-seat]') ?? null;
+  if (seat === null) return;
+  if (entry.hideComposer) seat.setAttribute(COMPOSER_ATTR, '');
+  else seat.removeAttribute(COMPOSER_ATTR);
+}
+
 function mount(host) {
   if (mounts.has(host)) return;
   let panel = null;
@@ -154,8 +188,26 @@ function mount(host) {
     target.replaceChildren(box);
     return;
   }
-  const entry = { panel, release: acquirePolling(panel), observer: null };
+  const entry = {
+    panel, release: acquirePolling(panel), observer: null,
+    scroller: null, hideComposer: false, composerObserver: null,
+  };
   mounts.set(host, entry);
+
+  // 输入框：只有对话页签实例才动。
+  const scroller = typeof host.closest === 'function' ? host.closest('[data-conversation-scroll]') : null;
+  if (scroller !== null && scroller !== undefined) {
+    ensureComposerStyle();
+    entry.scroller = scroller;
+    entry.hideComposer = true;
+    applyComposer(entry);
+    // 输入框由 React 渲染，可能比我们晚出现、也可能被重建：变了就再收一次。
+    if (typeof MutationObserver === 'function') {
+      const composerObserver = new MutationObserver(() => applyComposer(entry));
+      composerObserver.observe(scroller, { childList: true });
+      entry.composerObserver = composerObserver;
+    }
+  }
 
   // 立刻归零一次；宿主可能在挂载后才把滚动容器摆到底部，所以再补两次。
   resetScroll(host);
@@ -169,6 +221,11 @@ function mount(host) {
     const observer = new IntersectionObserver((entries) => {
       const visible = entries.some(item => item.isIntersecting);
       if (visible && !wasVisible) resetScroll(host);
+      // 面板可见 = 用户在看本页签；这时收起输入框，切走再放出来。
+      if (entry.scroller !== null && visible !== entry.hideComposer) {
+        entry.hideComposer = visible;
+        applyComposer(entry);
+      }
       wasVisible = visible;
     });
     observer.observe(host);
@@ -181,6 +238,12 @@ function unmount(host) {
   if (entry === undefined) return;
   mounts.delete(host);
   if (entry.observer !== null && entry.observer !== undefined) entry.observer.disconnect();
+  if (entry.composerObserver !== null && entry.composerObserver !== undefined) entry.composerObserver.disconnect();
+  // 卸载时一定要把输入框放回去，否则切回对话就没有输入框了。
+  if (entry.scroller !== null) {
+    entry.hideComposer = false;
+    applyComposer(entry);
+  }
   entry.release();
   entry.panel.destroy();
 }

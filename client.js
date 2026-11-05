@@ -1410,6 +1410,37 @@ var HarnessMMClient = (function(exports) {
 			depth += 1;
 		}
 	}
+	/**
+	* 对话页底部的输入框（`[data-composer-seat]`）是宿主的外壳，不是面板画的。
+	*
+	* `dsh-client-ui-conversation/lib/client.js` 里对话页的结构是：
+	*
+	*   <div data-conversation-scroll>
+	*     <Views />          // 页签内容：对话 / 上下文 / HarnessMM
+	*     {composerSeat}     // 输入框，无条件渲染，position:sticky bottom:0
+	*   </div>
+	*
+	* 两者是兄弟节点，宿主没有提供「本页签不要输入框」的开关，所以内置的「上下文」
+	* 页签同样带着它。面板铺满时它会挡住底部内容，因此在**本页签可见**期间把它收起来，
+	* 切回对话立刻放出来。
+	*
+	* 只在对话页签实例上生效：侧栏那个实例的祖先里没有 `data-conversation-scroll`。
+	*/
+	const COMPOSER_ATTR = "data-harnessmm-composer-hidden";
+	const COMPOSER_STYLE_ID = "harnessmm-composer-style";
+	function ensureComposerStyle() {
+		if (document.getElementById(COMPOSER_STYLE_ID) !== null) return;
+		const style = document.createElement("style");
+		style.id = COMPOSER_STYLE_ID;
+		style.textContent = `[data-composer-seat][${COMPOSER_ATTR}]{display:none !important}`;
+		document.head.appendChild(style);
+	}
+	function applyComposer(entry) {
+		const seat = entry.scroller?.querySelector("[data-composer-seat]") ?? null;
+		if (seat === null) return;
+		if (entry.hideComposer) seat.setAttribute(COMPOSER_ATTR, "");
+		else seat.removeAttribute(COMPOSER_ATTR);
+	}
 	function mount(host) {
 		if (mounts.has(host)) return;
 		let panel = null;
@@ -1428,9 +1459,24 @@ var HarnessMMClient = (function(exports) {
 		const entry = {
 			panel,
 			release: acquirePolling(panel),
-			observer: null
+			observer: null,
+			scroller: null,
+			hideComposer: false,
+			composerObserver: null
 		};
 		mounts.set(host, entry);
+		const scroller = typeof host.closest === "function" ? host.closest("[data-conversation-scroll]") : null;
+		if (scroller !== null && scroller !== void 0) {
+			ensureComposerStyle();
+			entry.scroller = scroller;
+			entry.hideComposer = true;
+			applyComposer(entry);
+			if (typeof MutationObserver === "function") {
+				const composerObserver = new MutationObserver(() => applyComposer(entry));
+				composerObserver.observe(scroller, { childList: true });
+				entry.composerObserver = composerObserver;
+			}
+		}
 		resetScroll(host);
 		if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => resetScroll(host));
 		setTimeout(() => resetScroll(host), 250);
@@ -1439,6 +1485,10 @@ var HarnessMMClient = (function(exports) {
 			const observer = new IntersectionObserver((entries) => {
 				const visible = entries.some((item) => item.isIntersecting);
 				if (visible && !wasVisible) resetScroll(host);
+				if (entry.scroller !== null && visible !== entry.hideComposer) {
+					entry.hideComposer = visible;
+					applyComposer(entry);
+				}
 				wasVisible = visible;
 			});
 			observer.observe(host);
@@ -1450,6 +1500,11 @@ var HarnessMMClient = (function(exports) {
 		if (entry === void 0) return;
 		mounts.delete(host);
 		if (entry.observer !== null && entry.observer !== void 0) entry.observer.disconnect();
+		if (entry.composerObserver !== null && entry.composerObserver !== void 0) entry.composerObserver.disconnect();
+		if (entry.scroller !== null) {
+			entry.hideComposer = false;
+			applyComposer(entry);
+		}
 		entry.release();
 		entry.panel.destroy();
 	}
